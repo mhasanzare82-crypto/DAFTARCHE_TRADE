@@ -175,8 +175,7 @@ class _NotesPageState extends State<NotesPage> {
   }
 
   Future<Note?> _noteFromDocx(PlatformFile file) async {
-    final bytes = file.bytes ?? (file.path == null ? null : await File(file.path!).readAsBytes());
-    if (bytes == null) return null;
+    final bytes = await file.readAsBytes();
     final zip = ZipDecoder().decodeBytes(bytes);
     final documentFile = zip.findFile('word/document.xml');
     if (documentFile == null) return null;
@@ -195,7 +194,7 @@ class _NotesPageState extends State<NotesPage> {
   Future<void> importDocx() async {
     try {
       final files = await FilePicker.pickFiles(type: FileType.custom,
-          allowedExtensions: ['docx'], allowMultiple: true, withData: true);
+          allowedExtensions: ['docx']);
       if (files.isEmpty) return;
       final imported = <Note>[];
       for (final file in files) {
@@ -243,10 +242,9 @@ class _NotesPageState extends State<NotesPage> {
       ));
       if (confirmed != true) return;
       final files = await FilePicker.pickFiles(type: FileType.custom,
-          allowedExtensions: ['json'], allowMultiple: false, withData: true);
+          allowedExtensions: ['json']);
       if (files.isEmpty) return;
-      final bytes = files.first.bytes ?? (files.first.path == null ? null : await File(files.first.path!).readAsBytes());
-      if (bytes == null) return;
+      final bytes = await files.first.readAsBytes();
       final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
       if (data['format'] != 'persian_notebook_backup' || data['version'] != 1) {
         throw const FormatException('فرمت فایل پشتیبان معتبر نیست');
