@@ -173,12 +173,12 @@ class _NotesPageState extends State<NotesPage> {
     if (color is String && RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(color)) props.write('<w:color w:val="$color"/>');
     final background = attributes['background'];
     if (background is String && RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(background)) props.write('<w:shd w:fill="$background"/>');
-    final size = double.tryParse('\${attributes['size'] ?? ''}');
+    final size = double.tryParse('${attributes['size'] ?? ''}');
     if (size != null) { final half = (size * 2).round(); props.write('<w:sz w:val="$half"/><w:szCs w:val="$half"/>'); }
     final font = attributes['font'];
-    if (font is String && font.isNotEmpty) props.write('<w:rFonts w:ascii="\${_xmlEscape(font)}" w:hAnsi="\${_xmlEscape(font)}" w:eastAsia="\${_xmlEscape(font)}"/>');
-    final rPr = props.isEmpty ? '' : '<w:rPr>\${props.toString()}</w:rPr>';
-    return '<w:r>$rPr<w:t xml:space="preserve">\${_xmlEscape(value)}</w:t></w:r>';
+    if (font is String && font.isNotEmpty) props.write('<w:rFonts w:ascii="${_xmlEscape(font)}" w:hAnsi="${_xmlEscape(font)}" w:eastAsia="${_xmlEscape(font)}"/>');
+    final rPr = props.isEmpty ? '' : '<w:rPr>${props.toString()}</w:rPr>';
+    return '<w:r>$rPr<w:t xml:space="preserve">${_xmlEscape(value)}</w:t></w:r>';
   }
 
   String _docxImageDrawing(String relationshipId) => '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="4572000" cy="3048000"/><wp:docPr id="1" name="Embedded image"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="image"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="$relationshipId"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="4572000" cy="3048000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
@@ -190,7 +190,7 @@ class _NotesPageState extends State<NotesPage> {
     var imageIndex = 0;
     final paragraphs = <String>[];
     for (final note in selected) {
-      paragraphs.add('<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>\${_docxRun(note.title.isEmpty ? 'بدون عنوان' : note.title, {'bold': true, 'size': 20})}</w:p>');
+      paragraphs.add('<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>${_docxRun(note.title.isEmpty ? 'بدون عنوان' : note.title, {'bold': true, 'size': 20})}</w:p>');
       var runs = StringBuffer();
       var paragraphAttributes = <String, dynamic>{};
       void flushParagraph() {
@@ -199,7 +199,7 @@ class _NotesPageState extends State<NotesPage> {
         if (header == 1 || header == 2 || header == 3) pPr.write('<w:pStyle w:val="Heading$header"/>');
         final align = paragraphAttributes['align'];
         if (align == 'center' || align == 'right' || align == 'left' || align == 'justify') pPr.write('<w:jc w:val="$align"/>');
-        paragraphs.add('<w:p>\${pPr.isEmpty ? '' : '<w:pPr>\${pPr.toString()}</w:pPr>'}\${runs.toString()}</w:p>');
+        paragraphs.add('<w:p>${pPr.isEmpty ? '' : '<w:pPr>${pPr.toString()}</w:pPr>'}${runs.toString()}</w:p>');
         runs = StringBuffer();
         paragraphAttributes = <String, dynamic>{};
       }
@@ -218,7 +218,7 @@ class _NotesPageState extends State<NotesPage> {
           final file = File(path);
           if (await file.exists()) {
             final ext = path.toLowerCase().endsWith('.png') ? 'png' : path.toLowerCase().endsWith('.gif') ? 'gif' : 'jpg';
-            final name = 'image\${++imageIndex}.$ext';
+            final name = 'image${++imageIndex}.$ext';
             media['word/media/$name'] = await file.readAsBytes();
             final rid = 'rIdImage$imageIndex';
             relationships.add('<Relationship Id="$rid" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/$name"/>');
@@ -233,10 +233,10 @@ class _NotesPageState extends State<NotesPage> {
       archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
     }
     final document = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>\${paragraphs.join()}<w:sectPr/></w:body></w:document>';
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>${paragraphs.join()}<w:sectPr/></w:body></w:document>';
     final contentTypes = '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>';
     final rootRels = '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
-    final docRels = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\${relationships.join()}</Relationships>';
+    final docRels = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships.join()}</Relationships>';
     archive
       ..addFile(ArchiveFile('[Content_Types].xml', contentTypes.length, utf8.encode(contentTypes)))
       ..addFile(ArchiveFile('_rels/.rels', rootRels.length, utf8.encode(rootRels)))
@@ -275,7 +275,7 @@ class _NotesPageState extends State<NotesPage> {
       }
     }
     final imageDirRoot = await getApplicationDocumentsDirectory();
-    final imageDir = Directory('\${imageDirRoot.path}/notebook_images');
+    final imageDir = Directory('${imageDirRoot.path}/notebook_images');
     if (!await imageDir.exists()) await imageDir.create(recursive: true);
     final operations = <Map<String, dynamic>>[];
     final imagePaths = <String>[];
@@ -326,7 +326,7 @@ class _NotesPageState extends State<NotesPage> {
           final mediaFile = zip.findFile(normalized) ?? zip.findFile(mediaPath);
           if (mediaFile == null) continue;
           final ext = normalized.contains('.') ? normalized.substring(normalized.lastIndexOf('.')) : '.png';
-          final path = '\${imageDir.path}/imported_\${DateTime.now().microsecondsSinceEpoch}_\${imagePaths.length}$ext';
+          final path = '${imageDir.path}/imported_${DateTime.now().microsecondsSinceEpoch}_${imagePaths.length}$ext';
           await File(path).writeAsBytes(mediaFile.content as List<int>);
           imagePaths.add(path);
           operations.add({'insert': {'image': path}});
@@ -338,7 +338,7 @@ class _NotesPageState extends State<NotesPage> {
     final plain = operations.where((op) => op['insert'] is String).map((op) => op['insert'] as String).join().trim();
     final title = plain.split('\n').firstOrNull?.trim() ?? '';
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    return Note(id, title, '__quill_note_v1__\${jsonEncode(operations.skipWhile((op) => op['insert'] is String && (op['insert'] as String).trim().isEmpty).toList())}', DateTime.now(), imagePaths);
+    return Note(id, title, '__quill_note_v1__${jsonEncode(operations.skipWhile((op) => op['insert'] is String && (op['insert'] as String).trim().isEmpty).toList())}', DateTime.now(), imagePaths);
   }
 
   Future<void> importDocx() async {
