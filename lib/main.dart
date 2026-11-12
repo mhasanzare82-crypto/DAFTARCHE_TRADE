@@ -146,14 +146,14 @@ class _NotesPageState extends State<NotesPage> {
   Uint8List _buildDocx(List<Note> selected) {
     final paragraphs = <String>[];
     for (final note in selected) {
-      paragraphs.add('<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t xml:space="preserve">\${_xmlEscape(note.title.isEmpty ? 'بدون عنوان' : note.title)}</w:t></w:r></w:p>');
-      for (final line in _notePlainText(note.body).split('\\n')) {
-        paragraphs.add('<w:p><w:r><w:t xml:space="preserve">\${_xmlEscape(line)}</w:t></w:r></w:p>');
+      paragraphs.add('<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t xml:space="preserve">${_xmlEscape(note.title.isEmpty ? 'بدون عنوان' : note.title)}</w:t></w:r></w:p>');
+      for (final line in _notePlainText(note.body).split('\n')) {
+        paragraphs.add('<w:p><w:r><w:t xml:space="preserve">${_xmlEscape(line)}</w:t></w:r></w:p>');
       }
       paragraphs.add('<w:p/>');
     }
     final document = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>\${paragraphs.join()}<w:sectPr/></w:body></w:document>';
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs.join()}<w:sectPr/></w:body></w:document>';
     final archive = Archive()
       ..addFile(ArchiveFile('[Content_Types].xml', utf8.encode('<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')))
       ..addFile(ArchiveFile('_rels/.rels', utf8.encode('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')))
@@ -165,12 +165,12 @@ class _NotesPageState extends State<NotesPage> {
     if (selected.isEmpty) return;
     final bytes = _buildDocx(selected);
     final name = selected.length == 1
-        ? '\${(selected.first.title.isEmpty ? 'note' : selected.first.title).replaceAll(RegExp(r'[^\\w\\-آ-ی]'), '_')}.docx'
+        ? '${(selected.first.title.isEmpty ? 'note' : selected.first.title).replaceAll(RegExp(r'[^\w\-آ-ی]'), '_')}.docx'
         : 'notebook_export.docx';
     try {
       await FilePicker.saveFile(fileName: name, bytes: bytes);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ذخیره فایل Word انجام نشد: \$e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ذخیره فایل Word انجام نشد: $e')));
     }
   }
 
@@ -189,7 +189,7 @@ class _NotesPageState extends State<NotesPage> {
         .where((line) => line.isNotEmpty).toList();
     if (paragraphs.isEmpty) return null;
     return Note(DateTime.now().microsecondsSinceEpoch.toString(), paragraphs.first,
-        paragraphs.skip(1).join('\\n'), DateTime.now());
+        paragraphs.skip(1).join('\n'), DateTime.now());
   }
 
   Future<void> importDocx() async {
@@ -202,9 +202,9 @@ class _NotesPageState extends State<NotesPage> {
         try { final note = await _noteFromDocx(file); if (note != null) imported.add(note); } catch (_) {}
       }
       if (imported.isNotEmpty) { setState(() => notes.addAll(imported)); await persist(); }
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('\${imported.length} فایل Word وارد شد')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${imported.length} فایل Word وارد شد')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ورود فایل‌ها انجام نشد: \$e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ورود فایل‌ها انجام نشد: $e')));
     }
   }
 
@@ -230,7 +230,7 @@ class _NotesPageState extends State<NotesPage> {
       await FilePicker.saveFile(fileName: 'notebook_backup.json',
           bytes: Uint8List.fromList(utf8.encode(backup)));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ساخت نسخه پشتیبان ناموفق بود: \$e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ساخت نسخه پشتیبان ناموفق بود: $e')));
     }
   }
 
@@ -246,14 +246,14 @@ class _NotesPageState extends State<NotesPage> {
         throw const FormatException('فرمت فایل پشتیبان معتبر نیست');
       }
       final dir = await getApplicationDocumentsDirectory();
-      final imageDir = Directory('\${dir.path}/notebook_images');
+      final imageDir = Directory('${dir.path}/notebook_images');
       if (!await imageDir.exists()) await imageDir.create(recursive: true);
       final restoredPaths = <String, String>{};
       final images = Map<String, dynamic>.from(data['images'] ?? {});
       for (final entry in images.entries) {
         final oldPath = entry.key;
         final extension = oldPath.contains('.') ? oldPath.substring(oldPath.lastIndexOf('.')) : '.jpg';
-        final newPath = '\${imageDir.path}/restored_\${DateTime.now().microsecondsSinceEpoch}_\${restoredPaths.length}\$extension';
+        final newPath = '${imageDir.path}/restored_${DateTime.now().microsecondsSinceEpoch}_${restoredPaths.length}$extension';
         await File(newPath).writeAsBytes(base64Decode(entry.value as String));
         restoredPaths[oldPath] = newPath;
       }
@@ -265,7 +265,7 @@ class _NotesPageState extends State<NotesPage> {
           }
           return block;
         }).toList();
-        final body = n.body.startsWith('__rich_note_v1__') ? '__rich_note_v1__\${jsonEncode(blocks)}' : n.body;
+        final body = n.body.startsWith('__rich_note_v1__') ? '__rich_note_v1__${jsonEncode(blocks)}' : n.body;
         return Note(n.id, n.title, body, n.updated,
           n.images.map((path) => restoredPaths[path] ?? path).toList(),
           n.themeColor, n.themeTextColor, n.themeFontFamily, n.folderId);
@@ -280,7 +280,7 @@ class _NotesPageState extends State<NotesPage> {
       await persist(); await persistFolders(); await persistThemes();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('نسخه پشتیبان با موفقیت بازیابی شد')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بازیابی نسخه پشتیبان ناموفق بود: \$e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بازیابی نسخه پشتیبان ناموفق بود: $e')));
     }
   }
 
@@ -575,7 +575,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('حذف تم؟'),
-        content: Text('تم «\${theme.name}» حذف شود؟'),
+        content: Text('تم «${theme.name}» حذف شود؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')),
           FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف')),
