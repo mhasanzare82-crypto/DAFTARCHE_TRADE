@@ -16,7 +16,7 @@ dependencies:
   archive: ^4.6.0
   file_picker: ^13.3.3
   xml: ^6.6.1
-  flutter_quill: ^11.6.0
+  flutter_quill: ^11.4.2
   flutter_quill_extensions: ^11.0.0
 dev_dependencies:
   flutter_test:
