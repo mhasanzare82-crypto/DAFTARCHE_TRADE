@@ -2,6 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'dart:typed_data';
+import 'package:archive/archive.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:xml/xml.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
@@ -134,6 +138,167 @@ class _NotesPageState extends State<NotesPage> {
       actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('انصراف')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:const Text('حذف'))]));
     if(yes==true){setState(()=>notes.removeWhere((x)=>x.id==n.id));await persist();}
   }
+
+  String _xmlEscape(String value) => value.replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;').replaceAll("'", '&apos;');
+
+  Uint8List _buildDocx(List<Note> selected) {
+    final paragraphs = <String>[];
+    for (final note in selected) {
+      paragraphs.add('<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t xml:space="preserve">\${_xmlEscape(note.title.isEmpty ? 'بدون عنوان' : note.title)}</w:t></w:r></w:p>');
+      for (final line in _notePlainText(note.body).split('\\n')) {
+        paragraphs.add('<w:p><w:r><w:t xml:space="preserve">\${_xmlEscape(line)}</w:t></w:r></w:p>');
+      }
+      paragraphs.add('<w:p/>');
+    }
+    final document = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>\${paragraphs.join()}<w:sectPr/></w:body></w:document>';
+    final archive = Archive()
+      ..addFile(ArchiveFile('[Content_Types].xml', utf8.encode('<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')))
+      ..addFile(ArchiveFile('_rels/.rels', utf8.encode('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')))
+      ..addFile(ArchiveFile('word/document.xml', utf8.encode(document)));
+    return Uint8List.fromList(ZipEncoder().encode(archive));
+  }
+
+  Future<void> exportDocx(List<Note> selected) async {
+    if (selected.isEmpty) return;
+    final bytes = _buildDocx(selected);
+    final name = selected.length == 1
+        ? '\${(selected.first.title.isEmpty ? 'note' : selected.first.title).replaceAll(RegExp(r'[^\\w\\-آ-ی]'), '_')}.docx'
+        : 'notebook_export.docx';
+    try {
+      await FilePicker.saveFile(fileName: name, bytes: bytes);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ذخیره فایل Word انجام نشد: \$e')));
+    }
+  }
+
+  Future<Note?> _noteFromDocx(PlatformFile file) async {
+    final bytes = file.bytes ?? (file.path == null ? null : await File(file.path!).readAsBytes());
+    if (bytes == null) return null;
+    final zip = ZipDecoder().decodeBytes(bytes);
+    final documentFile = zip.findFile('word/document.xml');
+    if (documentFile == null) return null;
+    final xml = XmlDocument.parse(utf8.decode(documentFile.content as List<int>));
+    final paragraphs = xml.descendants.whereType<XmlElement>()
+        .where((element) => element.name.local == 'p')
+        .map((paragraph) => paragraph.descendants.whereType<XmlElement>()
+            .where((element) => element.name.local == 't')
+            .map((element) => element.innerText).join())
+        .where((line) => line.isNotEmpty).toList();
+    if (paragraphs.isEmpty) return null;
+    return Note(DateTime.now().microsecondsSinceEpoch.toString(), paragraphs.first,
+        paragraphs.skip(1).join('\\n'), DateTime.now());
+  }
+
+  Future<void> importDocx() async {
+    try {
+      final files = await FilePicker.pickFiles(type: FileType.custom,
+          allowedExtensions: ['docx'], allowMultiple: true, withData: true);
+      if (files.isEmpty) return;
+      final imported = <Note>[];
+      for (final file in files) {
+        try { final note = await _noteFromDocx(file); if (note != null) imported.add(note); } catch (_) {}
+      }
+      if (imported.isNotEmpty) { setState(() => notes.addAll(imported)); await persist(); }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('\${imported.length} فایل Word وارد شد')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ورود فایل‌ها انجام نشد: \$e')));
+    }
+  }
+
+  Future<void> createBackup() async {
+    try {
+      final imageData = <String, String>{};
+      for (final note in notes) {
+        final paths = <String>{...note.images, ..._decodeNoteBlocks(note.body)
+            .where((b) => b['type'] == 'image').map((b) => b['path'] as String)};
+        for (final path in paths) {
+          final file = File(path);
+          if (await file.exists()) imageData[path] = base64Encode(await file.readAsBytes());
+        }
+      }
+      final backup = jsonEncode({
+        'format': 'persian_notebook_backup', 'version': 1,
+        'createdAt': DateTime.now().toIso8601String(),
+        'notes': notes.map((n) => n.toJson()).toList(),
+        'folders': folders.map((f) => f.toJson()).toList(),
+        'themes': themes.map((t) => t.toJson()).toList(),
+        'images': imageData,
+      });
+      await FilePicker.saveFile(fileName: 'notebook_backup.json',
+          bytes: Uint8List.fromList(utf8.encode(backup)));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ساخت نسخه پشتیبان ناموفق بود: \$e')));
+    }
+  }
+
+  Future<void> restoreBackup() async {
+    try {
+      final files = await FilePicker.pickFiles(type: FileType.custom,
+          allowedExtensions: ['json'], allowMultiple: false, withData: true);
+      if (files.isEmpty) return;
+      final bytes = files.first.bytes ?? (files.first.path == null ? null : await File(files.first.path!).readAsBytes());
+      if (bytes == null) return;
+      final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+      if (data['format'] != 'persian_notebook_backup' || data['version'] != 1) {
+        throw const FormatException('فرمت فایل پشتیبان معتبر نیست');
+      }
+      final dir = await getApplicationDocumentsDirectory();
+      final imageDir = Directory('\${dir.path}/notebook_images');
+      if (!await imageDir.exists()) await imageDir.create(recursive: true);
+      final restoredPaths = <String, String>{};
+      final images = Map<String, dynamic>.from(data['images'] ?? {});
+      for (final entry in images.entries) {
+        final oldPath = entry.key;
+        final extension = oldPath.contains('.') ? oldPath.substring(oldPath.lastIndexOf('.')) : '.jpg';
+        final newPath = '\${imageDir.path}/restored_\${DateTime.now().microsecondsSinceEpoch}_\${restoredPaths.length}\$extension';
+        await File(newPath).writeAsBytes(base64Decode(entry.value as String));
+        restoredPaths[oldPath] = newPath;
+      }
+      final restoredNotes = (data['notes'] as List).map((raw) {
+        final n = Note.fromJson(Map<String, dynamic>.from(raw));
+        final blocks = _decodeNoteBlocks(n.body).map((block) {
+          if (block['type'] == 'image' && restoredPaths.containsKey(block['path'])) {
+            return {...block, 'path': restoredPaths[block['path']]};
+          }
+          return block;
+        }).toList();
+        final body = n.body.startsWith('__rich_note_v1__') ? '__rich_note_v1__\${jsonEncode(blocks)}' : n.body;
+        return Note(n.id, n.title, body, n.updated,
+          n.images.map((path) => restoredPaths[path] ?? path).toList(),
+          n.themeColor, n.themeTextColor, n.themeFontFamily, n.folderId);
+      }).toList();
+      setState(() {
+        notes..clear()..addAll(restoredNotes);
+        folders..clear()..addAll((data['folders'] as List? ?? []).map((e) => NoteFolder.fromJson(Map<String, dynamic>.from(e))));
+        themes..clear()..addAll((data['themes'] as List? ?? []).map((e) => NoteTheme.fromJson(Map<String, dynamic>.from(e))));
+        if (themes.isEmpty) themes.addAll(defaultThemes);
+        selectedFolderId = null;
+      });
+      await persist(); await persistFolders(); await persistThemes();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('نسخه پشتیبان با موفقیت بازیابی شد')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بازیابی نسخه پشتیبان ناموفق بود: \$e')));
+    }
+  }
+
+  void showNoteMenu(Note note) {
+    showModalBottomSheet<void>(context: context, builder: (sheetContext) =>
+      Directionality(textDirection: TextDirection.rtl, child: SafeArea(child: Wrap(children: [
+        ListTile(leading: const Icon(Icons.file_download_outlined),
+          title: const Text('خروجی Word برای این یادداشت'),
+          onTap: () { Navigator.pop(sheetContext); exportDocx([note]); }),
+        ListTile(leading: const Icon(Icons.drive_file_move_outline),
+          title: const Text('انتقال به پوشه'),
+          onTap: () { Navigator.pop(sheetContext); moveNote(note); }),
+        ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red),
+          title: const Text('حذف یادداشت'),
+          onTap: () { Navigator.pop(sheetContext); remove(note); }),
+      ]))));
+  }
+
   String date(DateTime d)=>d.year.toString()+'/'+d.month.toString().padLeft(2,'0')+'/'+d.day.toString().padLeft(2,'0');
   @override
   void dispose(){search.dispose();super.dispose();}
@@ -141,18 +306,14 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context){
     final items=filtered;
     return Directionality(textDirection:TextDirection.rtl,child:Scaffold(
-      appBar:AppBar(title:const Text('دفترچه یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),actions:[IconButton(tooltip:'ایجاد پوشه',onPressed:createFolder,icon:const Icon(Icons.create_new_folder_outlined)),IconButton(tooltip:'مدیریت تم‌ها',onPressed:manageThemes,icon:const Icon(Icons.palette_outlined)),IconButton(onPressed:()=>edit(),icon:const Icon(Icons.add_rounded))]),
+      appBar:AppBar(title:const Text('دفترچه یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),actions:[PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(filtered);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'ایجاد پوشه',onPressed:createFolder,icon:const Icon(Icons.create_new_folder_outlined)),IconButton(tooltip:'مدیریت تم‌ها',onPressed:manageThemes,icon:const Icon(Icons.palette_outlined)),IconButton(onPressed:()=>edit(),icon:const Icon(Icons.add_rounded))]),
       floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text('ایده‌هایت را اینجا ثبت کن ✨',style:Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight:FontWeight.bold)),
           const SizedBox(height:6),Text(notes.length.toString()+' یادداشت در دفترچه‌ات داری',style:TextStyle(color:Colors.grey.shade600)),
           const SizedBox(height:12),
-          Row(children:[
-            const Text('پوشه‌ها',style:TextStyle(fontWeight:FontWeight.bold)),
-            const Spacer(),
-            TextButton.icon(onPressed:createFolder,icon:const Icon(Icons.create_new_folder_outlined,size:18),label:const Text('پوشه جدید')),
-          ]),
+          const Text('پوشه‌ها',style:TextStyle(fontWeight:FontWeight.bold)),
           SingleChildScrollView(scrollDirection:Axis.horizontal,child:Row(children:[
             Padding(padding:const EdgeInsets.only(left:8),child:ChoiceChip(label:const Text('همه'),selected:selectedFolderId==null,onSelected:(_)=>setState(()=>selectedFolderId=null))),
             ...folders.map((folder)=>Padding(padding:const EdgeInsets.only(left:8),child:ChoiceChip(avatar:const Icon(Icons.folder_outlined,size:17),label:Text(folder.name),selected:selectedFolderId==folder.id,onSelected:(_)=>setState(()=>selectedFolderId=folder.id)))),
@@ -165,7 +326,7 @@ class _NotesPageState extends State<NotesPage> {
           :ListView.separated(padding:const EdgeInsets.fromLTRB(20,0,20,100),itemCount:items.length,separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(_,i){
             final n=items[i];
             return Card(elevation:0,color:Color(n.themeColor),child:InkWell(onTap:()=>edit(n),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Row(children:[Expanded(child:Text(n.title.isEmpty?'بدون عنوان':n.title,style:TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily))),IconButton(tooltip:'انتقال به پوشه',onPressed:()=>moveNote(n),icon:const Icon(Icons.drive_file_move_outline)),IconButton(onPressed:()=>remove(n),icon:const Icon(Icons.delete_outline))]),
+              Row(children:[Expanded(child:Text(n.title.isEmpty?'بدون عنوان':n.title,style:TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily))),IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))]),
               if(_notePlainText(n.body).isNotEmpty)Text(_notePlainText(n.body),maxLines:3,overflow:TextOverflow.ellipsis,style:TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),
               if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Color(n.themeTextColor).withOpacity(.7),fontSize:12,fontFamily:n.themeFontFamily))),
               const SizedBox(height:8),Text(date(n.updated),style:TextStyle(fontSize:11,color:Color(n.themeTextColor).withOpacity(.65),fontFamily:n.themeFontFamily)),
