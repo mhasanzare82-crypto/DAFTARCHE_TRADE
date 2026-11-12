@@ -644,7 +644,7 @@ class _EditorPageState extends State<EditorPage> {
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 placeholder: 'متن یادداشتت را اینجا بنویس...',
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(
-                  imageEmbedConfig: quill.QuillEditorImageEmbedConfig(
+                  imageEmbedConfig: QuillEditorImageEmbedConfig(
                     imageProviderBuilder: (context, imageUrl) {
                       final local = File(imageUrl);
                       return local.existsSync() ? FileImage(local) : null;
