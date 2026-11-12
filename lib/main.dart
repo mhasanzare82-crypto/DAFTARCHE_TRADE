@@ -314,7 +314,7 @@ class _NotesPageState extends State<NotesPage> {
         final align = jc?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
         if (align != null) lineAttrs['align'] = align;
         final numId = pPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'numId').firstOrNull?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
-        if (numId != null) lineAttrs['list'] = numberingFormats[numId] == 'bullet' ? 'bullet' : 'ordered';
+        if (numId != null) { final format = numberingFormats[numId]; lineAttrs['list'] = format == null || format == 'bullet' ? 'bullet' : 'ordered'; }
       }
       for (final run in paragraph.descendants.whereType<XmlElement>().where((e) => e.name.local == 'r')) {
         final rPr = run.children.whereType<XmlElement>().where((e) => e.name.local == 'rPr').firstOrNull;
