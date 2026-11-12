@@ -1,19 +1,45 @@
-# EXM1
+# دفترچه یادداشت دیجیتال
 
-A new Flutter project created with FlutLab - https://flutlab.io
+یک اپلیکیشن دفترچه یادداشت فارسی و راست‌چین که با Flutter ساخته شده است.
 
-## Getting Started
+## امکانات
 
-A few resources to get you started if this is your first Flutter project:
+- ساخت، ویرایش و حذف یادداشت‌ها
+- ذخیره‌سازی محلی یادداشت‌ها روی دستگاه
+- جستجو در عنوان و متن یادداشت‌ها
+- ساخت پوشه و مرتب‌سازی یادداشت‌ها
+- انتقال یادداشت بین پوشه‌ها
+- افزودن تصویر از گالری به متن یادداشت
+- نقاشی و حاشیه‌نویسی روی تصاویر
+- انتخاب تم برای هر یادداشت
+- شخصی‌سازی رنگ پس‌زمینه، رنگ متن و فونت
+- رابط کاربری فارسی با پشتیبانی از چیدمان راست‌به‌چپ
 
-- https://flutter.dev/docs/get-started/codelab
-- https://flutter.dev/docs/cookbook
+## فناوری‌ها
 
-For help getting started with Flutter, view our
-https://flutter.dev/docs, which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Flutter و Dart
+- shared_preferences برای ذخیره‌سازی اطلاعات
+- image_picker برای انتخاب تصاویر
+- path_provider برای نگهداری فایل‌های تصویری
 
-## Getting Started: FlutLab - Flutter Online IDE
+## اجرا
 
-- How to use FlutLab? Please, view our https://flutlab.io/docs
-- Join the discussion and conversation on https://flutlab.io/residents
+ابتدا Flutter را نصب کنید، سپس در پوشه پروژه اجرا کنید:
+
+```bash
+flutter pub get
+flutter run
+```
+
+## ساخت نسخه خروجی اندروید
+
+```bash
+flutter build apk --release
+```
+
+## ساختار ذخیره‌سازی
+
+یادداشت‌ها، پوشه‌ها و تم‌ها به‌صورت محلی روی دستگاه ذخیره می‌شوند. تصاویر پیوست‌شده نیز در پوشه اختصاصی برنامه نگهداری می‌شوند.
+
+---
+ساخته‌شده با Flutter ❤️
