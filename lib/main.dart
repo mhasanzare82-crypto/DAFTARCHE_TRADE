@@ -7,6 +7,9 @@ import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:xml/xml.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,6 +22,8 @@ class NotebookApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false, title: 'دفترچه یادداشت',
     theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6956A5)), scaffoldBackgroundColor: const Color(0xFFF7F5FB)),
+    localizationsDelegates: const [GlobalMaterialLocalizations.delegate, GlobalCupertinoLocalizations.delegate, GlobalWidgetsLocalizations.delegate, quill.FlutterQuillLocalizations.delegate],
+    supportedLocales: const [Locale('fa'), Locale('en')],
     home: const NotesPage(),
   );
 }
@@ -355,131 +360,87 @@ class EditorPage extends StatefulWidget {
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
-class _NoteBlock {
-  final String? imagePath;
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  _NoteBlock.text(String value)
-      : imagePath = null, controller = TextEditingController(text: value), focusNode = FocusNode();
-  _NoteBlock.image(this.imagePath)
-      : controller = TextEditingController(), focusNode = FocusNode();
-  bool get isImage => imagePath != null;
-  void dispose() { controller.dispose(); focusNode.dispose(); }
-}
-
-String _encodeNoteBlocks(List<_NoteBlock> blocks) => '__rich_note_v1__' +
-    jsonEncode(blocks.map((b) => b.isImage
-        ? {'type': 'image', 'path': b.imagePath}
-        : {'type': 'text', 'text': b.controller.text}).toList());
-
-List<Map<String, dynamic>> _decodeNoteBlocks(String value) {
-  const marker = '__rich_note_v1__';
-  if (!value.startsWith(marker)) return [{'type': 'text', 'text': value}];
-  try {
-    return (jsonDecode(value.substring(marker.length)) as List)
-        .map((e) => Map<String, dynamic>.from(e as Map)).toList();
-  } catch (_) { return [{'type': 'text', 'text': value}]; }
-}
-
-String _notePlainText(String value) => _decodeNoteBlocks(value)
-    .where((b) => b['type'] == 'text')
-    .map((b) => b['text'] as String? ?? '').join('\n');
 
 class _EditorPageState extends State<EditorPage> {
   late final TextEditingController title;
-  final blocks = <_NoteBlock>[];
-  final picker = ImagePicker();
-  int activeBlockIndex = 0;
+  late final quill.QuillController controller;
   late int themeColor, themeTextColor;
   late String themeFontFamily;
   String? folderId;
+  static const marker = '__quill_note_v1__';
+
+  quill.Document _loadDocument(String? body, List<String> legacyImages) {
+    if (body != null && body.startsWith(marker)) {
+      try { return quill.Document.fromJson(jsonDecode(body.substring(marker.length)) as List); } catch (_) {}
+    }
+    final old = _decodeNoteBlocks(body ?? '');
+    final ops = <Map<String, dynamic>>[];
+    for (final block in old) {
+      if (block['type'] == 'image' && block['path'] is String) {
+        ops.add({'insert': {'image': block['path']}});
+        ops.add({'insert': '\n'});
+      } else {
+        final text = block['text'] as String? ?? '';
+        if (text.isNotEmpty) ops.add({'insert': text});
+        ops.add({'insert': '\n'});
+      }
+    }
+    if (!(body?.startsWith('__rich_note_v1__') ?? false)) {
+      for (final path in legacyImages) {
+        ops.add({'insert': {'image': path}});
+        ops.add({'insert': '\n'});
+      }
+    }
+    if (ops.isEmpty) ops.add({'insert': '\n'});
+    return quill.Document.fromJson(ops);
+  }
 
   @override
   void initState() {
     super.initState();
     title = TextEditingController(text: widget.note?.title ?? '');
-    final saved = _decodeNoteBlocks(widget.note?.body ?? '');
-    for (final item in saved) {
-      if (item['type'] == 'image' && item['path'] is String) {
-        blocks.add(_NoteBlock.image(item['path'] as String));
-      } else { blocks.add(_NoteBlock.text(item['text'] as String? ?? '')); }
-    }
-    if (!(widget.note?.body.startsWith('__rich_note_v1__') ?? false)) {
-      for (final path in widget.note?.images ?? const <String>[]) {
-        blocks.add(_NoteBlock.image(path));
-      }
-    }
-    if (blocks.isEmpty) blocks.add(_NoteBlock.text(''));
+    final doc = _loadDocument(widget.note?.body, widget.note?.images ?? const []);
+    controller = quill.QuillController(
+      document: doc,
+      selection: const TextSelection.collapsed(offset: 0),
+    );
     themeColor = widget.note?.themeColor ?? widget.initialTheme.backgroundColor;
     themeTextColor = widget.note?.themeTextColor ?? widget.initialTheme.textColor;
     themeFontFamily = widget.note?.themeFontFamily ?? widget.initialTheme.fontFamily;
     folderId = widget.note?.folderId ?? widget.initialFolderId;
   }
 
-  Future<String> copyImage(String path) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final folder = Directory(dir.path + '/notebook_images');
-    if (!await folder.exists()) await folder.create(recursive: true);
-    final ext = path.contains('.') ? path.substring(path.lastIndexOf('.')) : '.jpg';
-    return (await File(path).copy(folder.path + '/' + DateTime.now().microsecondsSinceEpoch.toString() + ext)).path;
-  }
-
   Future<void> addImage() async {
-    final picked = await picker.pickImage(source: ImageSource.gallery);
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null) return;
-    final path = await copyImage(picked.path);
+    final dir = await getApplicationDocumentsDirectory();
+    final folder = Directory('${dir.path}/notebook_images');
+    if (!await folder.exists()) await folder.create(recursive: true);
+    final ext = picked.path.contains('.') ? picked.path.substring(picked.path.lastIndexOf('.')) : '.jpg';
+    final path = '${folder.path}/${DateTime.now().microsecondsSinceEpoch}$ext';
+    await File(picked.path).copy(path);
     if (!mounted) return;
-    final index = activeBlockIndex.clamp(0, blocks.length - 1);
-    final current = blocks[index];
-    if (current.isImage) {
-      blocks.insert(index + 1, _NoteBlock.image(path));
-      blocks.insert(index + 2, _NoteBlock.text(''));
-      activeBlockIndex = index + 2;
-    } else {
-      final value = current.controller.text;
-      final selection = current.controller.selection;
-      final offset = selection.isValid ? selection.extentOffset.clamp(0, value.length) : value.length;
-      final before = value.substring(0, offset);
-      final after = value.substring(offset);
-      current.controller.text = before;
-      current.controller.selection = TextSelection.collapsed(offset: before.length);
-      blocks.insert(index + 1, _NoteBlock.image(path));
-      final next = _NoteBlock.text(after);
-      blocks.insert(index + 2, next);
-      activeBlockIndex = index + 2;
-      next.focusNode.requestFocus();
-      next.controller.selection = const TextSelection.collapsed(offset: 0);
-    }
-    setState(() {});
-  }
-
-  Future<void> draw(int index) async {
-    final result = await Navigator.push<String>(context, MaterialPageRoute(
-      builder: (_) => DrawingPage(imagePath: blocks[index].imagePath!),
-    ));
-    if (result != null && mounted) setState(() {
-      blocks[index].dispose();
-      blocks[index] = _NoteBlock.image(result);
-    });
-  }
-
-  void removeImage(int index) {
-    setState(() {
-      blocks[index].dispose();
-      blocks.removeAt(index);
-      if (blocks.isEmpty || blocks.last.isImage) blocks.add(_NoteBlock.text(''));
-      activeBlockIndex = (index - 1).clamp(0, blocks.length - 1);
-    });
+    final index = controller.selection.extentOffset.clamp(0, controller.document.length - 1);
+    controller.document.insert(index, quill.BlockEmbed.image(path));
+    controller.document.insert(index + 1, '\n');
+    controller.updateSelection(TextSelection.collapsed(offset: index + 2), quill.ChangeSource.local);
   }
 
   void save() {
-    final plain = blocks.where((b) => !b.isImage).map((b) => b.controller.text).join().trim();
-    final hasImages = blocks.any((b) => b.isImage);
-    if (title.text.trim().isEmpty && plain.isEmpty && !hasImages) { Navigator.pop(context); return; }
-    final imagePaths = blocks.where((b) => b.isImage).map((b) => b.imagePath!).toList();
+    final delta = controller.document.toDelta().toJson();
+    final plain = controller.document.toPlainText().trim();
+    final hasContent = delta.any((op) => op is Map && op['insert'] is Map);
+    if (title.text.trim().isEmpty && plain.isEmpty && !hasContent) { Navigator.pop(context); return; }
+    final imagePaths = <String>[];
+    for (final op in delta) {
+      if (op is Map && op['insert'] is Map) {
+        final image = (op['insert'] as Map)['image'];
+        if (image is String && !image.startsWith('http')) imagePaths.add(image);
+      }
+    }
     Navigator.pop(context, Note(
       widget.note?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-      title.text.trim(), _encodeNoteBlocks(blocks), DateTime.now(), imagePaths,
+      title.text.trim(), marker + jsonEncode(delta), DateTime.now(), imagePaths,
       themeColor, themeTextColor, themeFontFamily, folderId,
     ));
   }
@@ -487,46 +448,8 @@ class _EditorPageState extends State<EditorPage> {
   @override
   void dispose() {
     title.dispose();
-    for (final block in blocks) { block.dispose(); }
+    controller.dispose();
     super.dispose();
-  }
-
-  Widget _buildBlock(int index) {
-    final block = blocks[index];
-    if (!block.isImage) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: TextField(
-          controller: block.controller, focusNode: block.focusNode,
-          onTap: () => activeBlockIndex = index,
-          onChanged: (_) => activeBlockIndex = index,
-          minLines: 1, maxLines: null, keyboardType: TextInputType.multiline,
-          textDirection: TextDirection.rtl,
-          style: TextStyle(color: Color(themeTextColor), fontFamily: themeFontFamily, fontSize: 16),
-          decoration: const InputDecoration(
-            hintText: 'متن یادداشتت را اینجا بنویس...',
-            border: InputBorder.none, isCollapsed: true,
-          ),
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: LayoutBuilder(builder: (context, constraints) => Stack(children: [
-        Align(
-          alignment: Alignment.center,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-            child: Image.file(File(block.imagePath!), fit: BoxFit.contain),
-          ),
-        ),
-        Positioned(left: 4, top: 4, child: Row(children: [
-          IconButton.filled(onPressed: () => draw(index), icon: const Icon(Icons.draw_rounded), tooltip: 'نقاشی روی عکس'),
-          const SizedBox(width: 4),
-          IconButton.filled(onPressed: () => removeImage(index), icon: const Icon(Icons.delete_outline), tooltip: 'حذف عکس'),
-        ])),
-      ])),
-    );
   }
 
   @override
@@ -538,18 +461,47 @@ class _EditorPageState extends State<EditorPage> {
       ]),
       backgroundColor: Color(themeColor),
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(children: [
           TextField(
             controller: title, autofocus: true,
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: themeFontFamily),
             decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
           ),
-          const SizedBox(height: 10),
-          Expanded(child: ListView.builder(
-            itemCount: blocks.length,
-            itemBuilder: (context, index) => _buildBlock(index),
-          )),
+          const SizedBox(height: 8),
+          quill.QuillSimpleToolbar(
+            controller: controller,
+            config: quill.QuillSimpleToolbarConfig(
+              multiRowsDisplay: false,
+              embedButtons: FlutterQuillEmbeds.toolbarButtons(),
+              showFontFamily: true,
+              showFontSize: true,
+              showBoldButton: true,
+              showItalicButton: true,
+              showUnderLineButton: true,
+              showStrikeThrough: true,
+              showColorButton: true,
+              showBackgroundColorButton: true,
+              showHeaderStyle: true,
+              showListNumbers: true,
+              showListBullets: true,
+              showAlignmentButtons: true,
+              showQuote: true,
+              showCodeBlock: true,
+              showClearFormat: true,
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: quill.QuillEditor.basic(
+              controller: controller,
+              config: quill.QuillEditorConfig(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                placeholder: 'متن یادداشتت را اینجا بنویس...',
+                embedBuilders: FlutterQuillEmbeds.editorBuilders(),
+              ),
+            ),
+          ),
           SizedBox(width: double.infinity, child: OutlinedButton.icon(
             onPressed: addImage,
             icon: const Icon(Icons.add_photo_alternate_outlined),
