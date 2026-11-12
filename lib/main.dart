@@ -412,13 +412,29 @@ class _NotesPageState extends State<NotesPage> {
       }
       final restoredNotes = (data['notes'] as List).map((raw) {
         final n = Note.fromJson(Map<String, dynamic>.from(raw));
-        final blocks = _decodeNoteBlocks(n.body).map((block) {
-          if (block['type'] == 'image' && restoredPaths.containsKey(block['path'])) {
-            return {...block, 'path': restoredPaths[block['path']]};
-          }
-          return block;
-        }).toList();
-        final body = n.body.startsWith('__rich_note_v1__') ? '__rich_note_v1__${jsonEncode(blocks)}' : n.body;
+        var body = n.body;
+        if (n.body.startsWith('__quill_note_v1__')) {
+          final delta = (jsonDecode(n.body.substring('__quill_note_v1__'.length)) as List).map((rawOp) {
+            final op = Map<String, dynamic>.from(rawOp as Map);
+            if (op['insert'] is Map) {
+              final insert = Map<String, dynamic>.from(op['insert'] as Map);
+              final image = insert['image'];
+              if (image is String && restoredPaths.containsKey(image)) {
+                op['insert'] = {...insert, 'image': restoredPaths[image]};
+              }
+            }
+            return op;
+          }).toList();
+          body = '__quill_note_v1__${jsonEncode(delta)}';
+        } else if (n.body.startsWith('__rich_note_v1__')) {
+          final blocks = _decodeNoteBlocks(n.body).map((block) {
+            if (block['type'] == 'image' && restoredPaths.containsKey(block['path'])) {
+              return {...block, 'path': restoredPaths[block['path']]};
+            }
+            return block;
+          }).toList();
+          body = '__rich_note_v1__${jsonEncode(blocks)}';
+        }
         return Note(n.id, n.title, body, n.updated,
           n.images.map((path) => restoredPaths[path] ?? path).toList(),
           n.themeColor, n.themeTextColor, n.themeFontFamily, n.folderId);
