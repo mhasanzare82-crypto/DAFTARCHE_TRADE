@@ -65,7 +65,7 @@ class NotebookApp extends StatelessWidget {
   const NotebookApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false, title: 'دفترچه یادداشت',
+    debugShowCheckedModeBanner: false, title: 'دفترچه ترید',
     theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6956A5)), scaffoldBackgroundColor: const Color(0xFFF7F5FB)),
     localizationsDelegates: const [GlobalMaterialLocalizations.delegate, GlobalCupertinoLocalizations.delegate, GlobalWidgetsLocalizations.delegate, quill.FlutterQuillLocalizations.delegate],
     supportedLocales: const [Locale('fa'), Locale('en')],
