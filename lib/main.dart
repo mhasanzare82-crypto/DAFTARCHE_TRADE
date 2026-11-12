@@ -16,6 +16,50 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+const String _quillNoteMarker = '__quill_note_v1__';
+const String _legacyRichNoteMarker = '__rich_note_v1__';
+
+List<Map<String, dynamic>> _decodeNoteBlocks(String body) {
+  final value = body.startsWith(_legacyRichNoteMarker)
+      ? body.substring(_legacyRichNoteMarker.length)
+      : body;
+  try {
+    final decoded = jsonDecode(value);
+    if (decoded is List) {
+      return decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+    }
+  } catch (_) {}
+  if (body.startsWith(_quillNoteMarker)) {
+    try {
+      final delta = jsonDecode(body.substring(_quillNoteMarker.length)) as List;
+      return delta.map((raw) {
+        final op = Map<String, dynamic>.from(raw as Map);
+        final insert = op['insert'];
+        if (insert is Map && insert['image'] is String) {
+          return <String, dynamic>{'type': 'image', 'path': insert['image'] as String};
+        }
+        return <String, dynamic>{'type': 'text', 'text': insert is String ? insert : ''};
+      }).toList();
+    } catch (_) {}
+  }
+  return body.isEmpty ? <Map<String, dynamic>>[] : <Map<String, dynamic>>[{'type': 'text', 'text': body}];
+}
+
+String _notePlainText(String body) {
+  if (body.startsWith(_quillNoteMarker)) {
+    try {
+      final delta = jsonDecode(body.substring(_quillNoteMarker.length)) as List;
+      final document = quill.Document.fromJson(delta);
+      return document.toPlainText().trim();
+    } catch (_) {}
+  }
+  return _decodeNoteBlocks(body)
+      .where((block) => block['type'] == 'text')
+      .map((block) => block['text'] as String? ?? '')
+      .join('\n')
+      .trim();
+}
+
 void main() => runApp(const NotebookApp());
 class NotebookApp extends StatelessWidget {
   const NotebookApp({super.key});
@@ -384,7 +428,10 @@ class _NotesPageState extends State<NotesPage> {
       final imageData = <String, String>{};
       for (final note in notes) {
         final paths = <String>{...note.images, ..._decodeNoteBlocks(note.body)
-            .where((b) => b['type'] == 'image').map((b) => b['path'] as String)};
+            .where((b) => b['type'] == 'image').map((b) => b['path'] as String),
+          if (note.body.startsWith(_quillNoteMarker)) ...((jsonDecode(note.body.substring(_quillNoteMarker.length)) as List)
+            .whereType<Map>().map((op) => op['insert']).whereType<Map>()
+            .map((insert) => insert['image']).whereType<String>().where((path) => !path.startsWith('http')))};
         for (final path in paths) {
           final file = File(path);
           if (await file.exists()) imageData[path] = base64Encode(await file.readAsBytes());
