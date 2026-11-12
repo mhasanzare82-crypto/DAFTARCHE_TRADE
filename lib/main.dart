@@ -119,7 +119,7 @@ class _NotesPageState extends State<NotesPage> {
   }
   List<Note> get filtered {
     final q=search.text.trim().toLowerCase();
-    final list=notes.where((n)=>(selectedFolderId==null||n.folderId==selectedFolderId)&&(n.title.toLowerCase().contains(q)||n.body.toLowerCase().contains(q))).toList();
+    final list=notes.where((n)=>(selectedFolderId==null||n.folderId==selectedFolderId)&&(n.title.toLowerCase().contains(q)||_notePlainText(n.body).toLowerCase().contains(q))).toList();
     list.sort((a,b)=>b.updated.compareTo(a.updated));return list;
   }
   Future<void> edit([Note? note]) async {
@@ -167,7 +167,7 @@ class _NotesPageState extends State<NotesPage> {
             final n=items[i];
             return Card(elevation:0,color:Color(n.themeColor),child:InkWell(onTap:()=>edit(n),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               Row(children:[Expanded(child:Text(n.title.isEmpty?'بدون عنوان':n.title,style:TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily))),IconButton(tooltip:'انتقال به پوشه',onPressed:()=>moveNote(n),icon:const Icon(Icons.drive_file_move_outline)),IconButton(onPressed:()=>remove(n),icon:const Icon(Icons.delete_outline))]),
-              if(n.body.isNotEmpty)Text(n.body,maxLines:3,overflow:TextOverflow.ellipsis,style:TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),
+              if(_notePlainText(n.body).isNotEmpty)Text(_notePlainText(n.body),maxLines:3,overflow:TextOverflow.ellipsis,style:TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),
               if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Color(n.themeTextColor).withOpacity(.7),fontSize:12,fontFamily:n.themeFontFamily))),
               const SizedBox(height:8),Text(date(n.updated),style:TextStyle(fontSize:11,color:Color(n.themeTextColor).withOpacity(.65),fontFamily:n.themeFontFamily)),
             ]))));
@@ -186,61 +186,210 @@ class EditorPage extends StatefulWidget {
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
-class _EditorPageState extends State<EditorPage>{
-  late final TextEditingController title,body;
-  final images=<String>[];
-  final picker=ImagePicker();
+class _NoteBlock {
+  final String? imagePath;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  _NoteBlock.text(String value)
+      : imagePath = null, controller = TextEditingController(text: value), focusNode = FocusNode();
+  _NoteBlock.image(this.imagePath)
+      : controller = TextEditingController(), focusNode = FocusNode();
+  bool get isImage => imagePath != null;
+  void dispose() { controller.dispose(); focusNode.dispose(); }
+}
+
+String _encodeNoteBlocks(List<_NoteBlock> blocks) => '__rich_note_v1__' +
+    jsonEncode(blocks.map((b) => b.isImage
+        ? {'type': 'image', 'path': b.imagePath}
+        : {'type': 'text', 'text': b.controller.text}).toList());
+
+List<Map<String, dynamic>> _decodeNoteBlocks(String value) {
+  const marker = '__rich_note_v1__';
+  if (!value.startsWith(marker)) return [{'type': 'text', 'text': value}];
+  try {
+    return (jsonDecode(value.substring(marker.length)) as List)
+        .map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  } catch (_) { return [{'type': 'text', 'text': value}]; }
+}
+
+String _notePlainText(String value) => _decodeNoteBlocks(value)
+    .where((b) => b['type'] == 'text')
+    .map((b) => b['text'] as String? ?? '').join('\n');
+
+class _EditorPageState extends State<EditorPage> {
+  late final TextEditingController title;
+  final blocks = <_NoteBlock>[];
+  final picker = ImagePicker();
+  int activeBlockIndex = 0;
   late int themeColor, themeTextColor;
   late String themeFontFamily;
   String? folderId;
+
   @override
-  void initState(){super.initState();title=TextEditingController(text:widget.note?.title??'');body=TextEditingController(text:widget.note?.body??'');images.addAll(widget.note?.images??const []);themeColor=widget.note?.themeColor??widget.initialTheme.backgroundColor;themeTextColor=widget.note?.themeTextColor??widget.initialTheme.textColor;themeFontFamily=widget.note?.themeFontFamily??widget.initialTheme.fontFamily;folderId=widget.note?.folderId??widget.initialFolderId;}
-  Future<String> copyImage(String path)async{
-    final dir=await getApplicationDocumentsDirectory();
-    final folder=Directory(dir.path+'/notebook_images');
-    if(!await folder.exists())await folder.create(recursive:true);
-    final ext=path.contains('.')?path.substring(path.lastIndexOf('.')):'.jpg';
-    return (await File(path).copy(folder.path+'/'+DateTime.now().microsecondsSinceEpoch.toString()+ext)).path;
+  void initState() {
+    super.initState();
+    title = TextEditingController(text: widget.note?.title ?? '');
+    final saved = _decodeNoteBlocks(widget.note?.body ?? '');
+    for (final item in saved) {
+      if (item['type'] == 'image' && item['path'] is String) {
+        blocks.add(_NoteBlock.image(item['path'] as String));
+      } else { blocks.add(_NoteBlock.text(item['text'] as String? ?? '')); }
+    }
+    if (!(widget.note?.body.startsWith('__rich_note_v1__') ?? false)) {
+      for (final path in widget.note?.images ?? const <String>[]) {
+        blocks.add(_NoteBlock.image(path));
+      }
+    }
+    if (blocks.isEmpty) blocks.add(_NoteBlock.text(''));
+    themeColor = widget.note?.themeColor ?? widget.initialTheme.backgroundColor;
+    themeTextColor = widget.note?.themeTextColor ?? widget.initialTheme.textColor;
+    themeFontFamily = widget.note?.themeFontFamily ?? widget.initialTheme.fontFamily;
+    folderId = widget.note?.folderId ?? widget.initialFolderId;
   }
-  Future<void> addImage()async{
-    final x=await picker.pickImage(source:ImageSource.gallery,imageQuality:90);
-    if(x==null)return;
-    final path=await copyImage(x.path);
-    if(mounted)setState(()=>images.add(path));
+
+  Future<String> copyImage(String path) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final folder = Directory(dir.path + '/notebook_images');
+    if (!await folder.exists()) await folder.create(recursive: true);
+    final ext = path.contains('.') ? path.substring(path.lastIndexOf('.')) : '.jpg';
+    return (await File(path).copy(folder.path + '/' + DateTime.now().microsecondsSinceEpoch.toString() + ext)).path;
   }
-  Future<void> draw(int i)async{
-    final path=await Navigator.push<String>(context,MaterialPageRoute(builder:(_)=>DrawingPage(imagePath:images[i])));
-    if(path!=null&&mounted)setState(()=>images[i]=path);
+
+  Future<void> addImage() async {
+    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+    if (picked == null) return;
+    final path = await copyImage(picked.path);
+    if (!mounted) return;
+    final index = activeBlockIndex.clamp(0, blocks.length - 1);
+    final current = blocks[index];
+    if (current.isImage) {
+      blocks.insert(index + 1, _NoteBlock.image(path));
+      blocks.insert(index + 2, _NoteBlock.text(''));
+      activeBlockIndex = index + 2;
+    } else {
+      final value = current.controller.text;
+      final selection = current.controller.selection;
+      final offset = selection.isValid ? selection.extentOffset.clamp(0, value.length) : value.length;
+      final before = value.substring(0, offset);
+      final after = value.substring(offset);
+      current.controller.text = before;
+      current.controller.selection = TextSelection.collapsed(offset: before.length);
+      blocks.insert(index + 1, _NoteBlock.image(path));
+      final next = _NoteBlock.text(after);
+      blocks.insert(index + 2, next);
+      activeBlockIndex = index + 2;
+      next.focusNode.requestFocus();
+      next.controller.selection = const TextSelection.collapsed(offset: 0);
+    }
+    setState(() {});
   }
-  void save(){
-    if(title.text.trim().isEmpty&&body.text.trim().isEmpty&&images.isEmpty){Navigator.pop(context);return;}
-    Navigator.pop(context,Note(widget.note?.id??DateTime.now().microsecondsSinceEpoch.toString(),title.text.trim(),body.text.trim(),DateTime.now(),List.of(images),themeColor,themeTextColor,themeFontFamily,folderId));
+
+  Future<void> draw(int index) async {
+    final result = await Navigator.push<String>(context, MaterialPageRoute(
+      builder: (_) => DrawingPage(imagePath: blocks[index].imagePath!),
+    ));
+    if (result != null && mounted) setState(() {
+      blocks[index].dispose();
+      blocks[index] = _NoteBlock.image(result);
+    });
   }
+
+  void removeImage(int index) {
+    setState(() {
+      blocks[index].dispose();
+      blocks.removeAt(index);
+      if (blocks.isEmpty || blocks.last.isImage) blocks.add(_NoteBlock.text(''));
+      activeBlockIndex = (index - 1).clamp(0, blocks.length - 1);
+    });
+  }
+
+  void save() {
+    final plain = blocks.where((b) => !b.isImage).map((b) => b.controller.text).join().trim();
+    final hasImages = blocks.any((b) => b.isImage);
+    if (title.text.trim().isEmpty && plain.isEmpty && !hasImages) { Navigator.pop(context); return; }
+    final imagePaths = blocks.where((b) => b.isImage).map((b) => b.imagePath!).toList();
+    Navigator.pop(context, Note(
+      widget.note?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      title.text.trim(), _encodeNoteBlocks(blocks), DateTime.now(), imagePaths,
+      themeColor, themeTextColor, themeFontFamily, folderId,
+    ));
+  }
+
   @override
-  void dispose(){title.dispose();body.dispose();super.dispose();}
-  @override
-  Widget build(BuildContext context)=>Directionality(textDirection:TextDirection.rtl,child:Scaffold(
-    appBar:AppBar(title:const Text('یادداشت'),actions:[TextButton.icon(onPressed:save,icon:const Icon(Icons.check),label:const Text('ذخیره'))]),
-    backgroundColor:Color(themeColor),
-    body:Padding(padding:const EdgeInsets.all(20),child:Column(children:[
-      TextField(controller:title,autofocus:true,style:TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(themeTextColor),fontFamily:themeFontFamily),decoration:const InputDecoration(hintText:'عنوان یادداشت',border:InputBorder.none)),
-      const SizedBox(height:10),
-      Expanded(child:ListView(children:[
-        TextField(controller:body,minLines:5,maxLines:null,keyboardType:TextInputType.multiline,style:TextStyle(color:Color(themeTextColor),fontFamily:themeFontFamily,fontSize:16),decoration:const InputDecoration(hintText:'متن یادداشتت را اینجا بنویس...',border:InputBorder.none)),
-        if(images.isNotEmpty)...[
-          const SizedBox(height:14),const Text('تصاویر یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),const SizedBox(height:8),
-          for(int i=0;i<images.length;i++)Padding(padding:const EdgeInsets.only(bottom:14),child:ClipRRect(borderRadius:BorderRadius.circular(14),child:Stack(children:[
-            Image.file(File(images[i]),width:double.infinity,fit:BoxFit.contain),
-            Positioned(left:8,top:8,child:Row(children:[
-              IconButton.filled(onPressed:()=>draw(i),icon:const Icon(Icons.draw_rounded),tooltip:'نقاشی روی عکس'),
-              const SizedBox(width:5),IconButton.filled(onPressed:()=>setState(()=>images.removeAt(i)),icon:const Icon(Icons.delete_outline),tooltip:'حذف عکس'),
-            ])),
-          ]))),
-        ],
+  void dispose() {
+    title.dispose();
+    for (final block in blocks) { block.dispose(); }
+    super.dispose();
+  }
+
+  Widget _buildBlock(int index) {
+    final block = blocks[index];
+    if (!block.isImage) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: TextField(
+          controller: block.controller, focusNode: block.focusNode,
+          onTap: () => activeBlockIndex = index,
+          onChanged: (_) => activeBlockIndex = index,
+          minLines: 1, maxLines: null, keyboardType: TextInputType.multiline,
+          textDirection: TextDirection.rtl,
+          style: TextStyle(color: Color(themeTextColor), fontFamily: themeFontFamily, fontSize: 16),
+          decoration: const InputDecoration(
+            hintText: 'متن یادداشتت را اینجا بنویس...',
+            border: InputBorder.none, isCollapsed: true,
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: LayoutBuilder(builder: (context, constraints) => Stack(children: [
+        Align(
+          alignment: Alignment.center,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+            child: Image.file(File(block.imagePath!), fit: BoxFit.contain),
+          ),
+        ),
+        Positioned(left: 4, top: 4, child: Row(children: [
+          IconButton.filled(onPressed: () => draw(index), icon: const Icon(Icons.draw_rounded), tooltip: 'نقاشی روی عکس'),
+          const SizedBox(width: 4),
+          IconButton.filled(onPressed: () => removeImage(index), icon: const Icon(Icons.delete_outline), tooltip: 'حذف عکس'),
+        ])),
       ])),
-      SizedBox(width:double.infinity,child:OutlinedButton.icon(onPressed:addImage,icon:const Icon(Icons.add_photo_alternate_outlined),label:const Text('افزودن عکس از گالری'))),
-    ])),
-  ));
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+    textDirection: TextDirection.rtl,
+    child: Scaffold(
+      appBar: AppBar(title: const Text('یادداشت'), actions: [
+        TextButton.icon(onPressed: save, icon: const Icon(Icons.check), label: const Text('ذخیره')),
+      ]),
+      backgroundColor: Color(themeColor),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(children: [
+          TextField(
+            controller: title, autofocus: true,
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: themeFontFamily),
+            decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
+          ),
+          const SizedBox(height: 10),
+          Expanded(child: ListView.builder(
+            itemCount: blocks.length,
+            itemBuilder: (context, index) => _buildBlock(index),
+          )),
+          SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            onPressed: addImage,
+            icon: const Icon(Icons.add_photo_alternate_outlined),
+            label: const Text('افزودن عکس از گالری'),
+          )),
+        ]),
+      ),
+    ),
+  );
 }
 
 class ThemeManagerDialog extends StatefulWidget{
