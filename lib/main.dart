@@ -70,9 +70,9 @@ class _NotesPageState extends State<NotesPage> {
     await p.setString('notebook_themes',jsonEncode(themes.map((t)=>t.toJson()).toList()));
   }
   Future<void> manageThemes() async {
-    final result=await showDialog<NoteTheme>(context:context,builder:(context)=>const ThemeManagerDialog());
+    final result=await showDialog<List<NoteTheme>>(context:context,builder:(context)=>ThemeManagerDialog(initialThemes:List.of(themes)));
     if(result!=null){
-      setState(()=>themes.add(result));
+      setState((){themes..clear()..addAll(result);});
       await persistThemes();
     }
   }
@@ -101,19 +101,12 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context){
     final items=filtered;
     return Directionality(textDirection:TextDirection.rtl,child:Scaffold(
-      appBar:AppBar(title:const Text('دفترچه یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),actions:[IconButton(onPressed:()=>edit(),icon:const Icon(Icons.add_rounded))]),
+      appBar:AppBar(title:const Text('دفترچه یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),actions:[IconButton(tooltip:'مدیریت تم‌ها',onPressed:manageThemes,icon:const Icon(Icons.palette_outlined)),IconButton(onPressed:()=>edit(),icon:const Icon(Icons.add_rounded))]),
       floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text('ایده‌هایت را اینجا ثبت کن ✨',style:Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight:FontWeight.bold)),
           const SizedBox(height:6),Text(notes.length.toString()+' یادداشت در دفترچه‌ات داری',style:TextStyle(color:Colors.grey.shade600)),
-          const SizedBox(height:14),
-          Container(padding:const EdgeInsets.all(12),decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(16)),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Row(children:[const Expanded(child:Text('تم‌های رنگی یادداشت‌ها',style:TextStyle(fontWeight:FontWeight.bold))),TextButton.icon(onPressed:manageThemes,icon:const Icon(Icons.tune_rounded,size:18),label:const Text('مدیریت تم‌ها'))]),
-            const Text('هر یادداشت جدید به‌صورت تصادفی یکی از این رنگ‌ها را می‌گیرد.',style:TextStyle(fontSize:12,color:Colors.black54)),
-            const SizedBox(height:10),
-            Wrap(spacing:8,runSpacing:8,children:themes.map((t)=>Container(padding:const EdgeInsets.symmetric(horizontal:10,vertical:7),decoration:BoxDecoration(color:Color(t.backgroundColor),borderRadius:BorderRadius.circular(20),border:Border.all(color:Colors.black12)),child:Row(mainAxisSize:MainAxisSize.min,children:[Container(width:12,height:12,decoration:BoxDecoration(color:Color(t.backgroundColor),shape:BoxShape.circle,border:Border.all(color:Colors.black26))),const SizedBox(width:5),Text(t.name,style:const TextStyle(fontSize:12))]))).toList()),
-          ])),
           const SizedBox(height:16),
           TextField(controller:search,decoration:InputDecoration(hintText:'جستجو در یادداشت‌ها...',prefixIcon:const Icon(Icons.search),suffixIcon:search.text.isEmpty?null:IconButton(onPressed:search.clear,icon:const Icon(Icons.close)),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(16),borderSide:BorderSide.none))),
         ])),
@@ -198,36 +191,114 @@ class _EditorPageState extends State<EditorPage>{
 }
 
 class ThemeManagerDialog extends StatefulWidget{
-  const ThemeManagerDialog({super.key});
+  final List<NoteTheme> initialThemes;
+  const ThemeManagerDialog({super.key,required this.initialThemes});
   @override
   State<ThemeManagerDialog> createState()=>_ThemeManagerDialogState();
 }
 class _ThemeManagerDialogState extends State<ThemeManagerDialog>{
-  final name=TextEditingController();
-  int selectedBackground=0xFFEDE7F6, selectedText=0xFF24212A;
-  String selectedFont='sans-serif';
-  final colors=<int>[0xFFEDE7F6,0xFFE3F2FD,0xFFE8F5E9,0xFFFCE4EC,0xFFFFEAD5,0xFFFFF9C4,0xFFE0F7FA,0xFFE8EAF6,0xFFF3E5F5,0xFFEFEBE9,0xFFE0F2F1,0xFFFFEBEE];
-  final textColors=<int>[0xFF24212A,0xFF000000,0xFF37474F,0xFF1A237E,0xFF1B5E20,0xFF880E4F,0xFF4E342E,0xFFFFFFFF];
-  final fonts=<String>['sans-serif','serif','monospace','sans-serif-condensed','sans-serif-light'];
+  late List<NoteTheme> items;
   @override
-  void dispose(){name.dispose();super.dispose();}
+  void initState(){super.initState();items=List.of(widget.initialThemes);}
+  Future<void> editTheme([NoteTheme? old])async{
+    final result=await showDialog<NoteTheme>(context:context,builder:(_)=>ThemeEditorDialog(theme:old));
+    if(result==null)return;
+    setState((){if(old==null){items.add(result);}else{final i=items.indexOf(old);if(i>=0)items[i]=result;}});
+  }
+  Future<void> deleteTheme(NoteTheme t)async{
+    final yes=await showDialog<bool>(context:context,builder:(c)=>AlertDialog(
+      title:const Text('حذف تم؟'),content:Text('تم «'+t.name+'» حذف شود؟'),
+      actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('انصراف')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:const Text('حذف'))]));
+    if(yes==true)setState(()=>items.remove(t));
+  }
   @override
-  Widget build(BuildContext context)=>AlertDialog(
-    title:const Text('ساخت تم رنگی'),
-    content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
-      TextField(controller:name,maxLength:18,decoration:const InputDecoration(labelText:'نام تم',hintText:'مثلاً آرامش‌بخش')),
-      const SizedBox(height:12),const Text('رنگ پس‌زمینه'),
-      const SizedBox(height:10),
-      Wrap(spacing:10,runSpacing:10,children:colors.map((c)=>GestureDetector(onTap:()=>setState(()=>selectedBackground=c),child:Container(width:38,height:38,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:selectedBackground==c?Colors.deepPurple:Colors.black26,width:selectedBackground==c?3:1))))).toList()),
-      const SizedBox(height:16),const Text('رنگ نوشته'),
-      const SizedBox(height:10),
-      Wrap(spacing:10,runSpacing:10,children:textColors.map((c)=>GestureDetector(onTap:()=>setState(()=>selectedText=c),child:Container(width:32,height:32,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:selectedText==c?Colors.deepPurple:Colors.black26,width:selectedText==c?3:1))))).toList()),
-      const SizedBox(height:16),const Text('فونت نوشته'),
-      DropdownButtonFormField<String>(value:selectedFont,decoration:const InputDecoration(border:OutlineInputBorder()),items:fonts.map((f)=>DropdownMenuItem(value:f,child:Text(f,style:TextStyle(fontFamily:f)))).toList(),onChanged:(v){if(v!=null)setState(()=>selectedFont=v);}),
-      const SizedBox(height:16),Container(width:double.infinity,padding:const EdgeInsets.all(12),decoration:BoxDecoration(color:Color(selectedBackground),borderRadius:BorderRadius.circular(12)),child:Text('پیش‌نمایش نوشته‌های دفترچه',style:TextStyle(color:Color(selectedText),fontFamily:selectedFont,fontSize:16))),
-    ])),
-    actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('انصراف')),FilledButton(onPressed:()=>Navigator.pop(context,NoteTheme(name.text.trim().isEmpty?'تم جدید':name.text.trim(),selectedBackground,selectedText,selectedFont)),child:const Text('ساخت تم'))],
-  );
+  Widget build(BuildContext context)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
+    title:const Text('مدیریت تم‌ها'),
+    content:SizedBox(width:420,child:items.isEmpty?const Text('هنوز تمی نساخته‌ای.'):ListView(shrinkWrap:true,children:items.map((t)=>Card(
+      color:Color(t.backgroundColor),child:ListTile(
+        title:Text(t.name,style:TextStyle(color:Color(t.textColor),fontFamily:t.fontFamily)),
+        subtitle:Text('پس‌زمینه، رنگ متن و فونت',style:TextStyle(color:Color(t.textColor).withOpacity(.75))),
+        leading:CircleAvatar(backgroundColor:Color(t.backgroundColor),child:Icon(Icons.text_fields,color:Color(t.textColor))),
+        trailing:Wrap(mainAxisSize:MainAxisSize.min,children:[
+          IconButton(tooltip:'ویرایش',onPressed:()=>editTheme(t),icon:const Icon(Icons.edit_outlined)),
+          IconButton(tooltip:'حذف',onPressed:()=>deleteTheme(t),icon:const Icon(Icons.delete_outline)),
+        ]),
+        onTap:()=>editTheme(t),
+      )).toList())),
+    actions:[
+      TextButton.icon(onPressed:()=>editTheme(),icon:const Icon(Icons.add),label:const Text('ساخت تم')),
+      TextButton(onPressed:()=>Navigator.pop(context),child:const Text('انصراف')),
+      FilledButton(onPressed:()=>Navigator.pop(context,items),child:const Text('ذخیره')),
+    ],
+  ));
+}
+
+class ThemeEditorDialog extends StatefulWidget{
+  final NoteTheme? theme;
+  const ThemeEditorDialog({super.key,this.theme});
+  @override
+  State<ThemeEditorDialog> createState()=>_ThemeEditorDialogState();
+}
+class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
+  late final TextEditingController name,font;
+  late int background,textColor;
+  static const backgrounds=[
+    0xFFFFEBEE,0xFFFCE4EC,0xFFF3E5F5,0xFFEDE7F6,0xFFE8EAF6,
+    0xFFE3F2FD,0xFFE1F5FE,0xFFE0F7FA,0xFFE0F2F1,0xFFE8F5E9,
+    0xFFF1F8E9,0xFFF9FBE7,0xFFFFFDE7,0xFFFFF8E1,0xFFFFF3E0,
+    0xFFFFEAD5,0xFFFBE9E7,0xFFEFEBE9,0xFFECEFF1,0xFFE0E0E0,
+    0xFFCFD8DC,0xFFB3E5FC,0xFFB2DFDB,0xFFC8E6C9,0xFFDCEDC8,
+    0xFFFFF9C4,0xFFFFE0B2,0xFFFFCCBC,0xFFD7CCC8,0xFFD1C4E9,
+  ];
+  static const textColors=[
+    0xFF16131C,0xFF000000,0xFF263238,0xFF37474F,0xFF1A237E,
+    0xFF0D47A1,0xFF006064,0xFF004D40,0xFF1B5E20,0xFF33691E,
+    0xFF827717,0xFF5D4037,0xFF4E342E,0xFF6D4C41,0xFF880E4F,
+    0xFFAD1457,0xFF6A1B9A,0xFF4527A0,0xFFB71C1C,0xFFFFFFFF,
+  ];
+  static const commonFonts=['sans-serif','serif','monospace','sans-serif-condensed','sans-serif-light','sans-serif-medium','cursive'];
+  @override
+  void initState(){
+    super.initState();
+    final t=widget.theme;
+    name=TextEditingController(text:t?.name??'');
+    font=TextEditingController(text:t?.fontFamily??'sans-serif');
+    background=t?.backgroundColor??backgrounds[3];
+    textColor=t?.textColor??textColors.first;
+  }
+  @override
+  void dispose(){name.dispose();font.dispose();super.dispose();}
+  @override
+  Widget build(BuildContext context)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
+    title:Text(widget.theme==null?'ساخت تم جدید':'ویرایش تم'),
+    content:SingleChildScrollView(child:SizedBox(width:420,child:Column(
+      mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+        TextField(controller:name,maxLength:24,decoration:const InputDecoration(labelText:'نام دلخواه تم',hintText:'مثلاً شب آرام')),
+        const SizedBox(height:12),const Text('۱. رنگ پس‌زمینه (۳۰ رنگ)'),
+        const SizedBox(height:8),
+        Wrap(spacing:9,runSpacing:9,children:backgrounds.map((c)=>GestureDetector(
+          onTap:()=>setState(()=>background=c),
+          child:Container(width:32,height:32,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:background==c?Colors.deepPurple:Colors.black26,width:background==c?3:1))),
+        )).toList()),
+        const SizedBox(height:16),const Text('۲. رنگ متن'),
+        const SizedBox(height:8),
+        Wrap(spacing:9,runSpacing:9,children:textColors.map((c)=>GestureDetector(
+          onTap:()=>setState(()=>textColor=c),
+          child:Container(width:30,height:30,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:textColor==c?Colors.deepPurple:Colors.black26,width:textColor==c?3:1))),
+        )).toList()),
+        const SizedBox(height:16),const Text('۳. فونت دلخواه'),
+        TextField(controller:font,decoration:const InputDecoration(labelText:'نام فونت دستگاه یا فونت برنامه',hintText:'مثلاً sans-serif')),
+        const SizedBox(height:6),
+        Wrap(spacing:6,children:commonFonts.map((f)=>ActionChip(label:Text(f,style:TextStyle(fontFamily:f,fontSize:11)),onPressed:()=>setState(()=>font.text=f))).toList()),
+        const SizedBox(height:16),const Text('پیش‌نمایش'),
+        Container(width:double.infinity,padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:Color(background),borderRadius:BorderRadius.circular(12)),child:Text('یادداشت نمونه؛ این متن با فونت و رنگ انتخابی نمایش داده می‌شود.',style:TextStyle(color:Color(textColor),fontFamily:font.text.trim().isEmpty?'sans-serif':font.text.trim(),fontSize:16))),
+      ],
+    ))),
+    actions:[
+      TextButton(onPressed:()=>Navigator.pop(context),child:const Text('انصراف')),
+      FilledButton(onPressed:()=>Navigator.pop(context,NoteTheme(name.text.trim().isEmpty?'تم بدون نام':name.text.trim(),background,textColor,font.text.trim().isEmpty?'sans-serif':font.text.trim())),child:const Text('ذخیره تم')),
+    ],
+  ));
 }
 
 class Stroke{final List<Offset> points;final Color color;final double width;const Stroke(this.points,this.color,this.width);}
