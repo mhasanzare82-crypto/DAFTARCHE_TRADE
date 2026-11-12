@@ -280,7 +280,8 @@ class _NotesPageState extends State<NotesPage> {
     final operations = <Map<String, dynamic>>[];
     final imagePaths = <String>[];
     final paragraphs = xml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'p').toList();
-    for (final paragraph in paragraphs) {
+    final importedTitle = paragraphs.isEmpty ? '' : paragraphs.first.descendants.whereType<XmlElement>().where((e) => e.name.local == 't').map((e) => e.innerText).join().trim();
+    for (final paragraph in paragraphs.skip(1)) {
       final pPr = paragraph.children.whereType<XmlElement>().where((e) => e.name.local == 'pPr').firstOrNull;
       final lineAttrs = <String, dynamic>{};
       if (pPr != null) {
@@ -334,11 +335,9 @@ class _NotesPageState extends State<NotesPage> {
       }
       operations.add({'insert': '\n', if (lineAttrs.isNotEmpty) 'attributes': lineAttrs});
     }
-    if (operations.isEmpty) return null;
-    final plain = operations.where((op) => op['insert'] is String).map((op) => op['insert'] as String).join().trim();
-    final title = plain.split('\n').firstOrNull?.trim() ?? '';
+    if (operations.isEmpty) operations.add({'insert': '\n'});
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    return Note(id, title, '__quill_note_v1__${jsonEncode(operations.skipWhile((op) => op['insert'] is String && (op['insert'] as String).trim().isEmpty).toList())}', DateTime.now(), imagePaths);
+    return Note(id, importedTitle, '__quill_note_v1__${jsonEncode(operations)}', DateTime.now(), imagePaths);
   }
 
   Future<void> importDocx() async {
