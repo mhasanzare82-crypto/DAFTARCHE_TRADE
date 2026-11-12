@@ -23,19 +23,20 @@ class Note {
   final String id, title, body;
   final DateTime updated;
   final List<String> images;
-  final int themeColor;
-  const Note(this.id, this.title, this.body, this.updated, [this.images = const [], this.themeColor = 0xFFEDE7F6]);
-  Map<String, dynamic> toJson() => {'id':id,'title':title,'body':body,'updated':updated.toIso8601String(),'images':images,'themeColor':themeColor};
-  factory Note.fromJson(Map<String,dynamic> j) => Note(j['id'],j['title'],j['body'],DateTime.parse(j['updated']),List<String>.from(j['images'] ?? const []),j['themeColor'] ?? 0xFFEDE7F6);
+  final int themeColor, themeTextColor;
+  final String themeFontFamily;
+  const Note(this.id, this.title, this.body, this.updated, [this.images = const [], this.themeColor = 0xFFEDE7F6, this.themeTextColor = 0xFF24212A, this.themeFontFamily = 'sans-serif']);
+  Map<String, dynamic> toJson() => {'id':id,'title':title,'body':body,'updated':updated.toIso8601String(),'images':images,'themeColor':themeColor,'themeTextColor':themeTextColor,'themeFontFamily':themeFontFamily};
+  factory Note.fromJson(Map<String,dynamic> j) => Note(j['id'],j['title'],j['body'],DateTime.parse(j['updated']),List<String>.from(j['images'] ?? const []),j['themeColor'] ?? 0xFFEDE7F6,j['themeTextColor'] ?? 0xFF24212A,j['themeFontFamily'] ?? 'sans-serif');
 }
 
 class NoteTheme {
   final String name;
-  final int color;
-  const NoteTheme(this.name,this.color);
-  Map<String,dynamic> toJson()=>{'name':name,'color':color};
-  factory NoteTheme.fromJson(Map<String,dynamic> j)=>NoteTheme(j['name'] as String,j['color'] as int);
-}
+  final int backgroundColor, textColor;
+  final String fontFamily;
+  const NoteTheme(this.name,this.backgroundColor,[this.textColor=0xFF24212A,this.fontFamily='sans-serif']);
+  Map<String,dynamic> toJson()=>{'name':name,'backgroundColor':backgroundColor,'textColor':textColor,'fontFamily':fontFamily};
+  factory NoteTheme.fromJson(Map<String,dynamic> j)=>NoteTheme(j['name'] as String,j['backgroundColor'] ?? j['color'] as int,j['textColor'] ?? 0xFF24212A,j['fontFamily'] ?? 'sans-serif');
 }
 
 class NotesPage extends StatefulWidget {
@@ -81,8 +82,8 @@ class _NotesPageState extends State<NotesPage> {
     list.sort((a,b)=>b.updated.compareTo(a.updated));return list;
   }
   Future<void> edit([Note? note]) async {
-    final selected=note?.themeColor ?? (themes.isEmpty?0xFFEDE7F6:themes[Random().nextInt(themes.length)].color);
-    final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note,themes:themes,initialThemeColor:selected)));
+    final selected=note==null?(themes.isEmpty?defaultThemes.first:themes[Random().nextInt(themes.length)]):NoteTheme('فعلی',note.themeColor,note.themeTextColor,note.themeFontFamily);
+    final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note,themes:themes,initialTheme:selected)));
     if(result==null)return;
     setState(() { final i=notes.indexWhere((n)=>n.id==result.id); if(i<0){notes.add(result);}else{notes[i]=result;} });
     await persist();
@@ -111,7 +112,7 @@ class _NotesPageState extends State<NotesPage> {
             Row(children:[const Expanded(child:Text('تم‌های رنگی یادداشت‌ها',style:TextStyle(fontWeight:FontWeight.bold))),TextButton.icon(onPressed:manageThemes,icon:const Icon(Icons.tune_rounded,size:18),label:const Text('مدیریت تم‌ها'))]),
             const Text('هر یادداشت جدید به‌صورت تصادفی یکی از این رنگ‌ها را می‌گیرد.',style:TextStyle(fontSize:12,color:Colors.black54)),
             const SizedBox(height:10),
-            Wrap(spacing:8,runSpacing:8,children:themes.map((t)=>Container(padding:const EdgeInsets.symmetric(horizontal:10,vertical:7),decoration:BoxDecoration(color:Color(t.color),borderRadius:BorderRadius.circular(20),border:Border.all(color:Colors.black12)),child:Row(mainAxisSize:MainAxisSize.min,children:[Container(width:12,height:12,decoration:BoxDecoration(color:Color(t.color),shape:BoxShape.circle,border:Border.all(color:Colors.black26))),const SizedBox(width:5),Text(t.name,style:const TextStyle(fontSize:12))]))).toList()),
+            Wrap(spacing:8,runSpacing:8,children:themes.map((t)=>Container(padding:const EdgeInsets.symmetric(horizontal:10,vertical:7),decoration:BoxDecoration(color:Color(t.backgroundColor),borderRadius:BorderRadius.circular(20),border:Border.all(color:Colors.black12)),child:Row(mainAxisSize:MainAxisSize.min,children:[Container(width:12,height:12,decoration:BoxDecoration(color:Color(t.color),shape:BoxShape.circle,border:Border.all(color:Colors.black26))),const SizedBox(width:5),Text(t.name,style:const TextStyle(fontSize:12))]))).toList()),
           ])),
           const SizedBox(height:16),
           TextField(controller:search,decoration:InputDecoration(hintText:'جستجو در یادداشت‌ها...',prefixIcon:const Icon(Icons.search),suffixIcon:search.text.isEmpty?null:IconButton(onPressed:search.clear,icon:const Icon(Icons.close)),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(16),borderSide:BorderSide.none))),
@@ -121,10 +122,10 @@ class _NotesPageState extends State<NotesPage> {
           :ListView.separated(padding:const EdgeInsets.fromLTRB(20,0,20,100),itemCount:items.length,separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(_,i){
             final n=items[i];
             return Card(elevation:0,color:Color(n.themeColor),child:InkWell(onTap:()=>edit(n),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Row(children:[Expanded(child:Text(n.title.isEmpty?'بدون عنوان':n.title,style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16))),IconButton(onPressed:()=>remove(n),icon:const Icon(Icons.delete_outline))]),
-              if(n.body.isNotEmpty)Text(n.body,maxLines:3,overflow:TextOverflow.ellipsis),
-              if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Colors.grey.shade600,fontSize:12))),
-              const SizedBox(height:8),Text(date(n.updated),style:TextStyle(fontSize:11,color:Colors.grey.shade500)),
+              Row(children:[Expanded(child:Text(n.title.isEmpty?'بدون عنوان':n.title,style:TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily))),IconButton(onPressed:()=>remove(n),icon:const Icon(Icons.delete_outline))]),
+              if(n.body.isNotEmpty)Text(n.body,maxLines:3,overflow:TextOverflow.ellipsis,style:TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),
+              if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Color(n.themeTextColor).withOpacity(.7),fontSize:12,fontFamily:n.themeFontFamily))),
+              const SizedBox(height:8),Text(date(n.updated),style:TextStyle(fontSize:11,color:Color(n.themeTextColor).withOpacity(.65),fontFamily:n.themeFontFamily)),
             ]))));
           })),
       ])),
@@ -135,8 +136,8 @@ class _NotesPageState extends State<NotesPage> {
 class EditorPage extends StatefulWidget {
   final Note? note;
   final List<NoteTheme> themes;
-  final int initialThemeColor;
-  const EditorPage({super.key,this.note,required this.themes,required this.initialThemeColor});
+  final NoteTheme initialTheme;
+  const EditorPage({super.key,this.note,required this.themes,required this.initialTheme});
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
@@ -144,9 +145,10 @@ class _EditorPageState extends State<EditorPage>{
   late final TextEditingController title,body;
   final images=<String>[];
   final picker=ImagePicker();
-  late int themeColor;
+  late int themeColor, themeTextColor;
+  late String themeFontFamily;
   @override
-  void initState(){super.initState();title=TextEditingController(text:widget.note?.title??'');body=TextEditingController(text:widget.note?.body??'');images.addAll(widget.note?.images??const []);themeColor=widget.note?.themeColor??widget.initialThemeColor;}
+  void initState(){super.initState();title=TextEditingController(text:widget.note?.title??'');body=TextEditingController(text:widget.note?.body??'');images.addAll(widget.note?.images??const []);themeColor=widget.note?.themeColor??widget.initialTheme.backgroundColor;themeTextColor=widget.note?.themeTextColor??widget.initialTheme.textColor;themeFontFamily=widget.note?.themeFontFamily??widget.initialTheme.fontFamily;}
   Future<String> copyImage(String path)async{
     final dir=await getApplicationDocumentsDirectory();
     final folder=Directory(dir.path+'/notebook_images');
@@ -166,7 +168,7 @@ class _EditorPageState extends State<EditorPage>{
   }
   void save(){
     if(title.text.trim().isEmpty&&body.text.trim().isEmpty&&images.isEmpty){Navigator.pop(context);return;}
-    Navigator.pop(context,Note(widget.note?.id??DateTime.now().microsecondsSinceEpoch.toString(),title.text.trim(),body.text.trim(),DateTime.now(),List.of(images),themeColor));
+    Navigator.pop(context,Note(widget.note?.id??DateTime.now().microsecondsSinceEpoch.toString(),title.text.trim(),body.text.trim(),DateTime.now(),List.of(images),themeColor,themeTextColor,themeFontFamily));
   }
   @override
   void dispose(){title.dispose();body.dispose();super.dispose();}
@@ -175,10 +177,10 @@ class _EditorPageState extends State<EditorPage>{
     appBar:AppBar(title:const Text('یادداشت'),actions:[TextButton.icon(onPressed:save,icon:const Icon(Icons.check),label:const Text('ذخیره'))]),
     backgroundColor:Color(themeColor),
     body:Padding(padding:const EdgeInsets.all(20),child:Column(children:[
-      TextField(controller:title,autofocus:true,style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold),decoration:const InputDecoration(hintText:'عنوان یادداشت',border:InputBorder.none)),
+      TextField(controller:title,autofocus:true,style:TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:Color(themeTextColor),fontFamily:themeFontFamily),decoration:const InputDecoration(hintText:'عنوان یادداشت',border:InputBorder.none)),
       const SizedBox(height:10),
       Expanded(child:ListView(children:[
-        TextField(controller:body,minLines:5,maxLines:null,keyboardType:TextInputType.multiline,decoration:const InputDecoration(hintText:'متن یادداشتت را اینجا بنویس...',border:InputBorder.none)),
+        TextField(controller:body,minLines:5,maxLines:null,keyboardType:TextInputType.multiline,style:TextStyle(color:Color(themeTextColor),fontFamily:themeFontFamily,fontSize:16),decoration:const InputDecoration(hintText:'متن یادداشتت را اینجا بنویس...',border:InputBorder.none)),
         if(images.isNotEmpty)...[
           const SizedBox(height:14),const Text('تصاویر یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),const SizedBox(height:8),
           for(int i=0;i<images.length;i++)Padding(padding:const EdgeInsets.only(bottom:14),child:ClipRRect(borderRadius:BorderRadius.circular(14),child:Stack(children:[
@@ -202,8 +204,11 @@ class ThemeManagerDialog extends StatefulWidget{
 }
 class _ThemeManagerDialogState extends State<ThemeManagerDialog>{
   final name=TextEditingController();
-  int selected=0xFFEDE7F6;
+  int selectedBackground=0xFFEDE7F6, selectedText=0xFF24212A;
+  String selectedFont='sans-serif';
   final colors=<int>[0xFFEDE7F6,0xFFE3F2FD,0xFFE8F5E9,0xFFFCE4EC,0xFFFFEAD5,0xFFFFF9C4,0xFFE0F7FA,0xFFE8EAF6,0xFFF3E5F5,0xFFEFEBE9,0xFFE0F2F1,0xFFFFEBEE];
+  final textColors=<int>[0xFF24212A,0xFF000000,0xFF37474F,0xFF1A237E,0xFF1B5E20,0xFF880E4F,0xFF4E342E,0xFFFFFFFF];
+  final fonts=<String>['sans-serif','serif','monospace','sans-serif-condensed','sans-serif-light'];
   @override
   void dispose(){name.dispose();super.dispose();}
   @override
@@ -213,9 +218,15 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog>{
       TextField(controller:name,maxLength:18,decoration:const InputDecoration(labelText:'نام تم',hintText:'مثلاً آرامش‌بخش')),
       const SizedBox(height:12),const Text('رنگ پس‌زمینه'),
       const SizedBox(height:10),
-      Wrap(spacing:10,runSpacing:10,children:colors.map((c)=>GestureDetector(onTap:()=>setState(()=>selected=c),child:Container(width:38,height:38,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:selected==c?Colors.deepPurple:Colors.black26,width:selected==c?3:1))))).toList()),
+      Wrap(spacing:10,runSpacing:10,children:colors.map((c)=>GestureDetector(onTap:()=>setState(()=>selectedBackground=c),child:Container(width:38,height:38,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:selectedBackground==c?Colors.deepPurple:Colors.black26,width:selectedBackground==c?3:1))))).toList()),
+      const SizedBox(height:16),const Text('رنگ نوشته'),
+      const SizedBox(height:10),
+      Wrap(spacing:10,runSpacing:10,children:textColors.map((c)=>GestureDetector(onTap:()=>setState(()=>selectedText=c),child:Container(width:32,height:32,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:selectedText==c?Colors.deepPurple:Colors.black26,width:selectedText==c?3:1))))).toList()),
+      const SizedBox(height:16),const Text('فونت نوشته'),
+      DropdownButtonFormField<String>(value:selectedFont,decoration:const InputDecoration(border:OutlineInputBorder()),items:fonts.map((f)=>DropdownMenuItem(value:f,child:Text(f,style:TextStyle(fontFamily:f)))).toList(),onChanged:(v){if(v!=null)setState(()=>selectedFont=v);}),
+      const SizedBox(height:16),Container(width:double.infinity,padding:const EdgeInsets.all(12),decoration:BoxDecoration(color:Color(selectedBackground),borderRadius:BorderRadius.circular(12)),child:Text('پیش‌نمایش نوشته‌های دفترچه',style:TextStyle(color:Color(selectedText),fontFamily:selectedFont,fontSize:16))),
     ])),
-    actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('انصراف')),FilledButton(onPressed:()=>Navigator.pop(context,NoteTheme(name.text.trim().isEmpty?'تم جدید':name.text.trim(),selected)),child:const Text('ساخت تم'))],
+    actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('انصراف')),FilledButton(onPressed:()=>Navigator.pop(context,NoteTheme(name.text.trim().isEmpty?'تم جدید':name.text.trim(),selectedBackground,selectedText,selectedFont)),child:const Text('ساخت تم'))],
   );
 }
 
