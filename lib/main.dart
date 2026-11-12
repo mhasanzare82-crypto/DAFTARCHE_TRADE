@@ -241,10 +241,10 @@ class _NotesPageState extends State<NotesPage> {
         actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')), FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ادامه'))],
       ));
       if (confirmed != true) return;
-      final files = await FilePicker.pickFiles(type: FileType.custom,
+      final file = await FilePicker.pickFile(type: FileType.custom,
           allowedExtensions: ['json']);
-      if (files.isEmpty) return;
-      final bytes = await files.first.readAsBytes();
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
       final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
       if (data['format'] != 'persian_notebook_backup' || data['version'] != 1) {
         throw const FormatException('فرمت فایل پشتیبان معتبر نیست');
