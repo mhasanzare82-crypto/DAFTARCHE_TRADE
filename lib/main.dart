@@ -148,27 +148,106 @@ class _NotesPageState extends State<NotesPage> {
       .replaceAll('<', '&lt;').replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;').replaceAll("'", '&apos;');
 
-  Uint8List _buildDocx(List<Note> selected) {
+  List<Map<String, dynamic>> _deltaForNote(Note note) {
+    const marker = '__quill_note_v1__';
+    if (note.body.startsWith(marker)) {
+      try { return (jsonDecode(note.body.substring(marker.length)) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(); } catch (_) {}
+    }
+    final legacy = _decodeNoteBlocks(note.body);
+    final ops = <Map<String, dynamic>>[];
+    for (final item in legacy) {
+      if (item['type'] == 'image') { ops.add({'insert': {'image': item['path']}}); ops.add({'insert': '\n'}); }
+      else { ops.add({'insert': (item['text'] as String? ?? '') + '\n'}); }
+    }
+    return ops;
+  }
+
+  String _docxRun(String value, Map attributes) {
+    if (value.isEmpty) return '';
+    final props = StringBuffer();
+    if (attributes['bold'] == true) props.write('<w:b/>');
+    if (attributes['italic'] == true) props.write('<w:i/>');
+    if (attributes['underline'] == true) props.write('<w:u w:val="single"/>');
+    if (attributes['strike'] == true) props.write('<w:strike/>');
+    final color = attributes['color'];
+    if (color is String && RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(color)) props.write('<w:color w:val="$color"/>');
+    final background = attributes['background'];
+    if (background is String && RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(background)) props.write('<w:shd w:fill="$background"/>');
+    final size = double.tryParse('\${attributes['size'] ?? ''}');
+    if (size != null) { final half = (size * 2).round(); props.write('<w:sz w:val="$half"/><w:szCs w:val="$half"/>'); }
+    final font = attributes['font'];
+    if (font is String && font.isNotEmpty) props.write('<w:rFonts w:ascii="\${_xmlEscape(font)}" w:hAnsi="\${_xmlEscape(font)}" w:eastAsia="\${_xmlEscape(font)}"/>');
+    final rPr = props.isEmpty ? '' : '<w:rPr>\${props.toString()}</w:rPr>';
+    return '<w:r>$rPr<w:t xml:space="preserve">\${_xmlEscape(value)}</w:t></w:r>';
+  }
+
+  String _docxImageDrawing(String relationshipId) => '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="4572000" cy="3048000"/><wp:docPr id="1" name="Embedded image"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="image"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="$relationshipId"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="4572000" cy="3048000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+
+  Future<Uint8List> _buildDocx(List<Note> selected) async {
+    final archive = Archive();
+    final media = <String, List<int>>{};
+    final relationships = <String>[];
+    var imageIndex = 0;
     final paragraphs = <String>[];
     for (final note in selected) {
-      paragraphs.add('<w:p><w:r><w:t xml:space="preserve">${_xmlEscape(note.title.isEmpty ? 'بدون عنوان' : note.title)}</w:t></w:r></w:p>');
-      for (final line in _notePlainText(note.body).split('\n')) {
-        paragraphs.add('<w:p><w:r><w:t xml:space="preserve">${_xmlEscape(line)}</w:t></w:r></w:p>');
+      paragraphs.add('<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>\${_docxRun(note.title.isEmpty ? 'بدون عنوان' : note.title, {'bold': true, 'size': 20})}</w:p>');
+      var runs = StringBuffer();
+      var paragraphAttributes = <String, dynamic>{};
+      void flushParagraph() {
+        final pPr = StringBuffer();
+        final header = paragraphAttributes['header'];
+        if (header == 1 || header == 2 || header == 3) pPr.write('<w:pStyle w:val="Heading$header"/>');
+        final align = paragraphAttributes['align'];
+        if (align == 'center' || align == 'right' || align == 'left' || align == 'justify') pPr.write('<w:jc w:val="$align"/>');
+        paragraphs.add('<w:p>\${pPr.isEmpty ? '' : '<w:pPr>\${pPr.toString()}</w:pPr>'}\${runs.toString()}</w:p>');
+        runs = StringBuffer();
+        paragraphAttributes = <String, dynamic>{};
       }
+      for (final operation in _deltaForNote(note)) {
+        final insert = operation['insert'];
+        final attrs = operation['attributes'] is Map ? Map<String, dynamic>.from(operation['attributes'] as Map) : <String, dynamic>{};
+        if (insert is String) {
+          paragraphAttributes.addAll(attrs);
+          final pieces = insert.split('\n');
+          for (var i = 0; i < pieces.length; i++) {
+            if (pieces[i].isNotEmpty) runs.write(_docxRun(pieces[i], attrs));
+            if (i < pieces.length - 1) flushParagraph();
+          }
+        } else if (insert is Map && insert['image'] is String) {
+          final path = insert['image'] as String;
+          final file = File(path);
+          if (await file.exists()) {
+            final ext = path.toLowerCase().endsWith('.png') ? 'png' : path.toLowerCase().endsWith('.gif') ? 'gif' : 'jpg';
+            final name = 'image\${++imageIndex}.$ext';
+            media['word/media/$name'] = await file.readAsBytes();
+            final rid = 'rIdImage$imageIndex';
+            relationships.add('<Relationship Id="$rid" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/$name"/>');
+            runs.write(_docxImageDrawing(rid));
+          }
+        }
+      }
+      if (runs.isNotEmpty) flushParagraph();
       paragraphs.add('<w:p/>');
     }
+    for (final entry in media.entries) {
+      archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
+    }
     final document = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs.join()}<w:sectPr/></w:body></w:document>';
-    final archive = Archive()
-      ..addFile(ArchiveFile('[Content_Types].xml', utf8.encode('<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')))
-      ..addFile(ArchiveFile('_rels/.rels', utf8.encode('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')))
-      ..addFile(ArchiveFile('word/document.xml', utf8.encode(document)));
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>\${paragraphs.join()}<w:sectPr/></w:body></w:document>';
+    final contentTypes = '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>';
+    final rootRels = '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
+    final docRels = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\${relationships.join()}</Relationships>';
+    archive
+      ..addFile(ArchiveFile('[Content_Types].xml', contentTypes.length, utf8.encode(contentTypes)))
+      ..addFile(ArchiveFile('_rels/.rels', rootRels.length, utf8.encode(rootRels)))
+      ..addFile(ArchiveFile('word/_rels/document.xml.rels', docRels.length, utf8.encode(docRels)))
+      ..addFile(ArchiveFile('word/document.xml', document.length, utf8.encode(document)));
     return Uint8List.fromList(ZipEncoder().encode(archive));
   }
 
   Future<void> exportDocx(List<Note> selected) async {
     if (selected.isEmpty) return;
-    final bytes = _buildDocx(selected);
+    final bytes = await _buildDocx(selected);
     final name = selected.length == 1
         ? '${(selected.first.title.isEmpty ? 'note' : selected.first.title).replaceAll(RegExp(r'[^\w\-آ-ی]'), '_')}.docx'
         : 'notebook_export.docx';
