@@ -55,7 +55,7 @@ class _NotesPageState extends State<NotesPage> {
   Future<void> edit([Note? note]) async {
     final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note)));
     if(result==null)return;
-    setState(()=>{final i=notes.indexWhere((n)=>n.id==result.id);if(i<0){notes.add(result);}else{notes[i]=result;}});
+    setState(() { final i=notes.indexWhere((n)=>n.id==result.id); if(i<0){notes.add(result);}else{notes[i]=result;} });
     await persist();
   }
   Future<void> remove(Note n) async {
@@ -198,7 +198,7 @@ class _DrawingPageState extends State<DrawingPage>{
       Expanded(child:Center(child:RepaintBoundary(key:boundaryKey,child:GestureDetector(
         onPanStart:(d)=>setState(()=>active=[d.localPosition]),
         onPanUpdate:(d)=>setState(()=>active.add(d.localPosition)),
-        onPanEnd:(_)=>setState(()=>{if(active.isNotEmpty)strokes.add(Stroke(List.of(active),color,width));active=[];}),
+        onPanEnd:(_) => setState(() { if(active.isNotEmpty) strokes.add(Stroke(List.of(active),color,width)); active=[]; }),
         child:Stack(fit:StackFit.expand,children:[
           Image.file(File(widget.imagePath),fit:BoxFit.contain),
           CustomPaint(painter:DrawingPainter(strokes,active,color,width),size:Size.infinite),
