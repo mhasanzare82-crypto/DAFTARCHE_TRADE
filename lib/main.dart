@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -22,9 +23,19 @@ class Note {
   final String id, title, body;
   final DateTime updated;
   final List<String> images;
-  const Note(this.id, this.title, this.body, this.updated, [this.images = const []]);
-  Map<String, dynamic> toJson() => {'id':id,'title':title,'body':body,'updated':updated.toIso8601String(),'images':images};
-  factory Note.fromJson(Map<String,dynamic> j) => Note(j['id'],j['title'],j['body'],DateTime.parse(j['updated']),List<String>.from(j['images'] ?? const []));
+  final int themeColor;
+  const Note(this.id, this.title, this.body, this.updated, [this.images = const [], this.themeColor = 0xFFEDE7F6]);
+  Map<String, dynamic> toJson() => {'id':id,'title':title,'body':body,'updated':updated.toIso8601String(),'images':images,'themeColor':themeColor};
+  factory Note.fromJson(Map<String,dynamic> j) => Note(j['id'],j['title'],j['body'],DateTime.parse(j['updated']),List<String>.from(j['images'] ?? const []),j['themeColor'] ?? 0xFFEDE7F6);
+}
+
+class NoteTheme {
+  final String name;
+  final int color;
+  const NoteTheme(this.name,this.color);
+  Map<String,dynamic> toJson()=>{'name':name,'color':color};
+  factory NoteTheme.fromJson(Map<String,dynamic> j)=>NoteTheme(j['name'] as String,j['color'] as int);
+}
 }
 
 class NotesPage extends StatefulWidget {
@@ -34,18 +45,35 @@ class NotesPage extends StatefulWidget {
 }
 class _NotesPageState extends State<NotesPage> {
   final notes=<Note>[];
+  final themes=<NoteTheme>[];
   final search=TextEditingController();
   bool loading=true;
+  static const defaultThemes=[NoteTheme('یاسی',0xFFEDE7F6),NoteTheme('آبی',0xFFE3F2FD),NoteTheme('سبز',0xFFE8F5E9),NoteTheme('صورتی',0xFFFCE4EC),NoteTheme('هلویی',0xFFFFEAD5)];
+
   @override
   void initState(){super.initState();search.addListener(()=>setState((){}));load();}
   Future<void> load() async {
     final p=await SharedPreferences.getInstance();
     try { notes.addAll((jsonDecode(p.getString('notebook_notes')??'[]') as List).map((e)=>Note.fromJson(e))); } catch(_){}
+    try { themes.addAll((jsonDecode(p.getString('notebook_themes')??'[]') as List).map((e)=>NoteTheme.fromJson(e))); } catch(_){}
+    if(themes.isEmpty) themes.addAll(defaultThemes);
     if(mounted)setState(()=>loading=false);
+    await persistThemes();
   }
   Future<void> persist() async {
     final p=await SharedPreferences.getInstance();
     await p.setString('notebook_notes',jsonEncode(notes.map((n)=>n.toJson()).toList()));
+  }
+  Future<void> persistThemes() async {
+    final p=await SharedPreferences.getInstance();
+    await p.setString('notebook_themes',jsonEncode(themes.map((t)=>t.toJson()).toList()));
+  }
+  Future<void> manageThemes() async {
+    final result=await showDialog<NoteTheme>(context:context,builder:(context)=>const ThemeManagerDialog());
+    if(result!=null){
+      setState(()=>themes.add(result));
+      await persistThemes();
+    }
   }
   List<Note> get filtered {
     final q=search.text.trim().toLowerCase();
@@ -53,7 +81,8 @@ class _NotesPageState extends State<NotesPage> {
     list.sort((a,b)=>b.updated.compareTo(a.updated));return list;
   }
   Future<void> edit([Note? note]) async {
-    final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note)));
+    final selected=note?.themeColor ?? (themes.isEmpty?0xFFEDE7F6:themes[Random().nextInt(themes.length)].color);
+    final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note,themes:themes,initialThemeColor:selected)));
     if(result==null)return;
     setState(() { final i=notes.indexWhere((n)=>n.id==result.id); if(i<0){notes.add(result);}else{notes[i]=result;} });
     await persist();
@@ -77,6 +106,13 @@ class _NotesPageState extends State<NotesPage> {
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text('ایده‌هایت را اینجا ثبت کن ✨',style:Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight:FontWeight.bold)),
           const SizedBox(height:6),Text(notes.length.toString()+' یادداشت در دفترچه‌ات داری',style:TextStyle(color:Colors.grey.shade600)),
+          const SizedBox(height:14),
+          Container(padding:const EdgeInsets.all(12),decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(16)),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Row(children:[const Expanded(child:Text('تم‌های رنگی یادداشت‌ها',style:TextStyle(fontWeight:FontWeight.bold))),TextButton.icon(onPressed:manageThemes,icon:const Icon(Icons.tune_rounded,size:18),label:const Text('مدیریت تم‌ها'))]),
+            const Text('هر یادداشت جدید به‌صورت تصادفی یکی از این رنگ‌ها را می‌گیرد.',style:TextStyle(fontSize:12,color:Colors.black54)),
+            const SizedBox(height:10),
+            Wrap(spacing:8,runSpacing:8,children:themes.map((t)=>Container(padding:const EdgeInsets.symmetric(horizontal:10,vertical:7),decoration:BoxDecoration(color:Color(t.color),borderRadius:BorderRadius.circular(20),border:Border.all(color:Colors.black12)),child:Row(mainAxisSize:MainAxisSize.min,children:[Container(width:12,height:12,decoration:BoxDecoration(color:Color(t.color),shape:BoxShape.circle,border:Border.all(color:Colors.black26))),const SizedBox(width:5),Text(t.name,style:const TextStyle(fontSize:12))]))).toList()),
+          ])),
           const SizedBox(height:16),
           TextField(controller:search,decoration:InputDecoration(hintText:'جستجو در یادداشت‌ها...',prefixIcon:const Icon(Icons.search),suffixIcon:search.text.isEmpty?null:IconButton(onPressed:search.clear,icon:const Icon(Icons.close)),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(16),borderSide:BorderSide.none))),
         ])),
@@ -84,7 +120,7 @@ class _NotesPageState extends State<NotesPage> {
           ?Center(child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[const Icon(Icons.menu_book_rounded,size:64,color:Color(0xFF9B8CCB)),const SizedBox(height:12),Text(search.text.isEmpty?'دفترچه‌ات هنوز خالی است':'یادداشتی پیدا نشد',style:const TextStyle(fontSize:18,fontWeight:FontWeight.bold)),const SizedBox(height:8),Text(search.text.isEmpty?'اولین یادداشتت را بنویس.':'عبارت دیگری را جستجو کن.'),if(search.text.isEmpty)...[const SizedBox(height:14),FilledButton(onPressed:()=>edit(),child:const Text('نوشتن اولین یادداشت'))]]))
           :ListView.separated(padding:const EdgeInsets.fromLTRB(20,0,20,100),itemCount:items.length,separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(_,i){
             final n=items[i];
-            return Card(elevation:0,color:Colors.white,child:InkWell(onTap:()=>edit(n),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            return Card(elevation:0,color:Color(n.themeColor),child:InkWell(onTap:()=>edit(n),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               Row(children:[Expanded(child:Text(n.title.isEmpty?'بدون عنوان':n.title,style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16))),IconButton(onPressed:()=>remove(n),icon:const Icon(Icons.delete_outline))]),
               if(n.body.isNotEmpty)Text(n.body,maxLines:3,overflow:TextOverflow.ellipsis),
               if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Colors.grey.shade600,fontSize:12))),
@@ -98,7 +134,9 @@ class _NotesPageState extends State<NotesPage> {
 
 class EditorPage extends StatefulWidget {
   final Note? note;
-  const EditorPage({super.key,this.note});
+  final List<NoteTheme> themes;
+  final int initialThemeColor;
+  const EditorPage({super.key,this.note,required this.themes,required this.initialThemeColor});
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
@@ -106,8 +144,9 @@ class _EditorPageState extends State<EditorPage>{
   late final TextEditingController title,body;
   final images=<String>[];
   final picker=ImagePicker();
+  late int themeColor;
   @override
-  void initState(){super.initState();title=TextEditingController(text:widget.note?.title??'');body=TextEditingController(text:widget.note?.body??'');images.addAll(widget.note?.images??const []);}
+  void initState(){super.initState();title=TextEditingController(text:widget.note?.title??'');body=TextEditingController(text:widget.note?.body??'');images.addAll(widget.note?.images??const []);themeColor=widget.note?.themeColor??widget.initialThemeColor;}
   Future<String> copyImage(String path)async{
     final dir=await getApplicationDocumentsDirectory();
     final folder=Directory(dir.path+'/notebook_images');
@@ -127,13 +166,14 @@ class _EditorPageState extends State<EditorPage>{
   }
   void save(){
     if(title.text.trim().isEmpty&&body.text.trim().isEmpty&&images.isEmpty){Navigator.pop(context);return;}
-    Navigator.pop(context,Note(widget.note?.id??DateTime.now().microsecondsSinceEpoch.toString(),title.text.trim(),body.text.trim(),DateTime.now(),List.of(images)));
+    Navigator.pop(context,Note(widget.note?.id??DateTime.now().microsecondsSinceEpoch.toString(),title.text.trim(),body.text.trim(),DateTime.now(),List.of(images),themeColor));
   }
   @override
   void dispose(){title.dispose();body.dispose();super.dispose();}
   @override
   Widget build(BuildContext context)=>Directionality(textDirection:TextDirection.rtl,child:Scaffold(
     appBar:AppBar(title:const Text('یادداشت'),actions:[TextButton.icon(onPressed:save,icon:const Icon(Icons.check),label:const Text('ذخیره'))]),
+    backgroundColor:Color(themeColor),
     body:Padding(padding:const EdgeInsets.all(20),child:Column(children:[
       TextField(controller:title,autofocus:true,style:const TextStyle(fontSize:22,fontWeight:FontWeight.bold),decoration:const InputDecoration(hintText:'عنوان یادداشت',border:InputBorder.none)),
       const SizedBox(height:10),
@@ -153,6 +193,30 @@ class _EditorPageState extends State<EditorPage>{
       SizedBox(width:double.infinity,child:OutlinedButton.icon(onPressed:addImage,icon:const Icon(Icons.add_photo_alternate_outlined),label:const Text('افزودن عکس از گالری'))),
     ])),
   ));
+}
+
+class ThemeManagerDialog extends StatefulWidget{
+  const ThemeManagerDialog({super.key});
+  @override
+  State<ThemeManagerDialog> createState()=>_ThemeManagerDialogState();
+}
+class _ThemeManagerDialogState extends State<ThemeManagerDialog>{
+  final name=TextEditingController();
+  int selected=0xFFEDE7F6;
+  final colors=<int>[0xFFEDE7F6,0xFFE3F2FD,0xFFE8F5E9,0xFFFCE4EC,0xFFFFEAD5,0xFFFFF9C4,0xFFE0F7FA,0xFFE8EAF6,0xFFF3E5F5,0xFFEFEBE9,0xFFE0F2F1,0xFFFFEBEE];
+  @override
+  void dispose(){name.dispose();super.dispose();}
+  @override
+  Widget build(BuildContext context)=>AlertDialog(
+    title:const Text('ساخت تم رنگی'),
+    content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+      TextField(controller:name,maxLength:18,decoration:const InputDecoration(labelText:'نام تم',hintText:'مثلاً آرامش‌بخش')),
+      const SizedBox(height:12),const Text('رنگ پس‌زمینه'),
+      const SizedBox(height:10),
+      Wrap(spacing:10,runSpacing:10,children:colors.map((c)=>GestureDetector(onTap:()=>setState(()=>selected=c),child:Container(width:38,height:38,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:selected==c?Colors.deepPurple:Colors.black26,width:selected==c?3:1))))).toList()),
+    ])),
+    actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('انصراف')),FilledButton(onPressed:()=>Navigator.pop(context,NoteTheme(name.text.trim().isEmpty?'تم جدید':name.text.trim(),selected)),child:const Text('ساخت تم'))],
+  );
 }
 
 class Stroke{final List<Offset> points;final Color color;final double width;const Stroke(this.points,this.color,this.width);}
