@@ -37,7 +37,6 @@ class NoteFolder {
   Map<String,dynamic> toJson()=>{'id':id,'name':name};
   factory NoteFolder.fromJson(Map<String,dynamic> j)=>NoteFolder(j['id'] as String,j['name'] as String);
 }
-}
 
 class NoteTheme {
   final String name;
@@ -392,47 +391,73 @@ class _EditorPageState extends State<EditorPage> {
   );
 }
 
-class ThemeManagerDialog extends StatefulWidget{
+class ThemeManagerDialog extends StatefulWidget {
   final List<NoteTheme> initialThemes;
-  const ThemeManagerDialog({super.key,required this.initialThemes});
+  const ThemeManagerDialog({super.key, required this.initialThemes});
   @override
-  State<ThemeManagerDialog> createState()=>_ThemeManagerDialogState();
+  State<ThemeManagerDialog> createState() => _ThemeManagerDialogState();
 }
-class _ThemeManagerDialogState extends State<ThemeManagerDialog>{
+class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
   late List<NoteTheme> items;
   @override
-  void initState(){super.initState();items=List.of(widget.initialThemes);}
-  Future<void> editTheme([NoteTheme? old])async{
-    final result=await showDialog<NoteTheme>(context:context,builder:(_)=>ThemeEditorDialog(theme:old));
-    if(result==null)return;
-    setState((){if(old==null){items.add(result);}else{final i=items.indexOf(old);if(i>=0)items[i]=result;}});
+  void initState() { super.initState(); items = List.of(widget.initialThemes); }
+  Future<void> editTheme([NoteTheme? old]) async {
+    final result = await showDialog<NoteTheme>(context: context, builder: (_) => ThemeEditorDialog(theme: old));
+    if (result == null) return;
+    setState(() {
+      if (old == null) { items.add(result); }
+      else { final index = items.indexOf(old); if (index >= 0) items[index] = result; }
+    });
   }
-  Future<void> deleteTheme(NoteTheme t)async{
-    final yes=await showDialog<bool>(context:context,builder:(c)=>AlertDialog(
-      title:const Text('حذف تم؟'),content:Text('تم «'+t.name+'» حذف شود؟'),
-      actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('انصراف')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:const Text('حذف'))]));
-    if(yes==true)setState(()=>items.remove(t));
+  Future<void> deleteTheme(NoteTheme theme) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('حذف تم؟'),
+        content: Text('تم «\${theme.name}» حذف شود؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirmed == true) setState(() => items.remove(theme));
   }
   @override
-  Widget build(BuildContext context)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
-    title:const Text('مدیریت تم‌ها'),
-    content:SizedBox(width:420,child:items.isEmpty?const Text('هنوز تمی نساخته‌ای.'):ListView(shrinkWrap:true,children:items.map((t)=>Card(
-      color:Color(t.backgroundColor),child:ListTile(
-        title:Text(t.name,style:TextStyle(color:Color(t.textColor),fontFamily:t.fontFamily)),
-        subtitle:Text('پس‌زمینه، رنگ متن و فونت',style:TextStyle(color:Color(t.textColor).withOpacity(.75))),
-        leading:CircleAvatar(backgroundColor:Color(t.backgroundColor),child:Icon(Icons.text_fields,color:Color(t.textColor))),
-        trailing:Wrap(mainAxisSize:MainAxisSize.min,children:[
-          IconButton(tooltip:'ویرایش',onPressed:()=>editTheme(t),icon:const Icon(Icons.edit_outlined)),
-          IconButton(tooltip:'حذف',onPressed:()=>deleteTheme(t),icon:const Icon(Icons.delete_outline)),
-        ]),
-        onTap:()=>editTheme(t),
-      )).toList())),
-    actions:[
-      TextButton.icon(onPressed:()=>editTheme(),icon:const Icon(Icons.add),label:const Text('ساخت تم')),
-      TextButton(onPressed:()=>Navigator.pop(context),child:const Text('انصراف')),
-      FilledButton(onPressed:()=>Navigator.pop(context,items),child:const Text('ذخیره')),
-    ],
-  ));
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: AlertDialog(
+        title: const Text('مدیریت تم‌ها'),
+        content: SizedBox(
+          width: 420,
+          child: items.isEmpty
+              ? const Text('هنوز تمی نساخته‌ای.')
+              : ListView(
+                  shrinkWrap: true,
+                  children: items.map((theme) => Card(
+                    color: Color(theme.backgroundColor),
+                    child: ListTile(
+                      title: Text(theme.name, style: TextStyle(color: Color(theme.textColor), fontFamily: theme.fontFamily)),
+                      subtitle: Text('پس‌زمینه، رنگ متن و فونت', style: TextStyle(color: Color(theme.textColor).withOpacity(.75))),
+                      leading: CircleAvatar(backgroundColor: Color(theme.backgroundColor), child: Icon(Icons.text_fields, color: Color(theme.textColor))),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(tooltip: 'ویرایش', onPressed: () => editTheme(theme), icon: const Icon(Icons.edit_outlined)),
+                        IconButton(tooltip: 'حذف', onPressed: () => deleteTheme(theme), icon: const Icon(Icons.delete_outline)),
+                      ]),
+                      onTap: () => editTheme(theme),
+                    ),
+                  )).toList(),
+                ),
+        ),
+        actions: [
+          TextButton.icon(onPressed: () => editTheme(), icon: const Icon(Icons.add), label: const Text('ساخت تم')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+          FilledButton(onPressed: () => Navigator.pop(context, items), child: const Text('ذخیره')),
+        ],
+      ),
+    );
+  }
 }
 
 class ThemeEditorDialog extends StatefulWidget{
