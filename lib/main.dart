@@ -146,7 +146,7 @@ class _NotesPageState extends State<NotesPage> {
   Uint8List _buildDocx(List<Note> selected) {
     final paragraphs = <String>[];
     for (final note in selected) {
-      paragraphs.add('<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t xml:space="preserve">${_xmlEscape(note.title.isEmpty ? 'بدون عنوان' : note.title)}</w:t></w:r></w:p>');
+      paragraphs.add('<w:p><w:r><w:t xml:space="preserve">${_xmlEscape(note.title.isEmpty ? 'بدون عنوان' : note.title)}</w:t></w:r></w:p>');
       for (final line in _notePlainText(note.body).split('\n')) {
         paragraphs.add('<w:p><w:r><w:t xml:space="preserve">${_xmlEscape(line)}</w:t></w:r></w:p>');
       }
@@ -236,6 +236,12 @@ class _NotesPageState extends State<NotesPage> {
 
   Future<void> restoreBackup() async {
     try {
+      final confirmed = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
+        title: const Text('بازیابی نسخه پشتیبان؟'),
+        content: const Text('یادداشت‌ها، پوشه‌ها و تم‌های فعلی با اطلاعات فایل پشتیبان جایگزین می‌شوند.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')), FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ادامه'))],
+      ));
+      if (confirmed != true) return;
       final files = await FilePicker.pickFiles(type: FileType.custom,
           allowedExtensions: ['json'], allowMultiple: false, withData: true);
       if (files.isEmpty) return;
