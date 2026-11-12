@@ -279,6 +279,22 @@ class _NotesPageState extends State<NotesPage> {
         if (id != null && target != null) relationships[id] = target;
       }
     }
+    final numberingFormats = <String, String>{};
+    final numberingFile = zip.findFile('word/numbering.xml');
+    if (numberingFile != null) {
+      final numberingXml = XmlDocument.parse(utf8.decode(numberingFile.content as List<int>));
+      final abstractFormats = <String, String>{};
+      for (final item in numberingXml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'abstractNum')) {
+        final abstractId = item.attributes.where((a) => a.name.local == 'abstractNumId').map((a) => a.value).firstOrNull;
+        final format = item.descendants.whereType<XmlElement>().where((e) => e.name.local == 'numFmt').firstOrNull?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
+        if (abstractId != null && format != null) abstractFormats[abstractId] = format;
+      }
+      for (final item in numberingXml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'num')) {
+        final numId = item.attributes.where((a) => a.name.local == 'numId').map((a) => a.value).firstOrNull;
+        final abstractId = item.descendants.whereType<XmlElement>().where((e) => e.name.local == 'abstractNumId').firstOrNull?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
+        if (numId != null && abstractId != null && abstractFormats.containsKey(abstractId)) numberingFormats[numId] = abstractFormats[abstractId]!;
+      }
+    }
     final imageDirRoot = await getApplicationDocumentsDirectory();
     final imageDir = Directory('${imageDirRoot.path}/notebook_images');
     if (!await imageDir.exists()) await imageDir.create(recursive: true);
@@ -298,7 +314,7 @@ class _NotesPageState extends State<NotesPage> {
         final align = jc?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
         if (align != null) lineAttrs['align'] = align;
         final numId = pPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'numId').firstOrNull?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
-        if (numId != null) lineAttrs['list'] = numId == '2' ? 'ordered' : 'bullet';
+        if (numId != null) lineAttrs['list'] = numberingFormats[numId] == 'bullet' ? 'bullet' : 'ordered';
       }
       for (final run in paragraph.descendants.whereType<XmlElement>().where((e) => e.name.local == 'r')) {
         final rPr = run.children.whereType<XmlElement>().where((e) => e.name.local == 'rPr').firstOrNull;
