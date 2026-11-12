@@ -256,7 +256,7 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   Future<void> addImage() async {
-    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+    final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
     final path = await copyImage(picked.path);
     if (!mounted) return;
