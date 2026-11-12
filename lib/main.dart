@@ -264,15 +264,81 @@ class _NotesPageState extends State<NotesPage> {
     final documentFile = zip.findFile('word/document.xml');
     if (documentFile == null) return null;
     final xml = XmlDocument.parse(utf8.decode(documentFile.content as List<int>));
-    final paragraphs = xml.descendants.whereType<XmlElement>()
-        .where((element) => element.name.local == 'p')
-        .map((paragraph) => paragraph.descendants.whereType<XmlElement>()
-            .where((element) => element.name.local == 't')
-            .map((element) => element.innerText).join())
-        .where((line) => line.isNotEmpty).toList();
-    if (paragraphs.isEmpty) return null;
-    return Note(DateTime.now().microsecondsSinceEpoch.toString(), paragraphs.first,
-        paragraphs.skip(1).join('\n'), DateTime.now());
+    final relsFile = zip.findFile('word/_rels/document.xml.rels');
+    final relationships = <String, String>{};
+    if (relsFile != null) {
+      final rels = XmlDocument.parse(utf8.decode(relsFile.content as List<int>));
+      for (final rel in rels.descendants.whereType<XmlElement>().where((e) => e.name.local == 'Relationship')) {
+        final id = rel.attributes.where((a) => a.name.local == 'Id').map((a) => a.value).firstOrNull;
+        final target = rel.attributes.where((a) => a.name.local == 'Target').map((a) => a.value).firstOrNull;
+        if (id != null && target != null) relationships[id] = target;
+      }
+    }
+    final imageDirRoot = await getApplicationDocumentsDirectory();
+    final imageDir = Directory('\${imageDirRoot.path}/notebook_images');
+    if (!await imageDir.exists()) await imageDir.create(recursive: true);
+    final operations = <Map<String, dynamic>>[];
+    final imagePaths = <String>[];
+    final paragraphs = xml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'p').toList();
+    for (final paragraph in paragraphs) {
+      final pPr = paragraph.children.whereType<XmlElement>().where((e) => e.name.local == 'pPr').firstOrNull;
+      final lineAttrs = <String, dynamic>{};
+      if (pPr != null) {
+        final style = pPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'pStyle').firstOrNull;
+        final styleVal = style?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull ?? '';
+        final heading = RegExp(r'Heading([1-3])', caseSensitive: false).firstMatch(styleVal);
+        if (heading != null) lineAttrs['header'] = int.parse(heading.group(1)!);
+        final jc = pPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'jc').firstOrNull;
+        final align = jc?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
+        if (align != null) lineAttrs['align'] = align;
+        if (pPr.descendants.whereType<XmlElement>().any((e) => e.name.local == 'numPr')) lineAttrs['list'] = 'bullet';
+      }
+      for (final run in paragraph.descendants.whereType<XmlElement>().where((e) => e.name.local == 'r')) {
+        final rPr = run.children.whereType<XmlElement>().where((e) => e.name.local == 'rPr').firstOrNull;
+        final attrs = <String, dynamic>{};
+        if (rPr != null) {
+          if (rPr.descendants.whereType<XmlElement>().any((e) => e.name.local == 'b')) attrs['bold'] = true;
+          if (rPr.descendants.whereType<XmlElement>().any((e) => e.name.local == 'i')) attrs['italic'] = true;
+          if (rPr.descendants.whereType<XmlElement>().any((e) => e.name.local == 'u')) attrs['underline'] = true;
+          if (rPr.descendants.whereType<XmlElement>().any((e) => e.name.local == 'strike')) attrs['strike'] = true;
+          final color = rPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'color').firstOrNull;
+          final colorValue = color?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
+          if (colorValue != null && RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(colorValue)) attrs['color'] = colorValue;
+          final shade = rPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'shd').firstOrNull;
+          final shadeValue = shade?.attributes.where((a) => a.name.local == 'fill').map((a) => a.value).firstOrNull;
+          if (shadeValue != null && RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(shadeValue)) attrs['background'] = shadeValue;
+          final size = rPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'sz').firstOrNull;
+          final sizeValue = size?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
+          if (sizeValue != null) { final parsed = int.tryParse(sizeValue); if (parsed != null) attrs['size'] = (parsed / 2).toString(); }
+          final fonts = rPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'rFonts').firstOrNull;
+          final fontValue = fonts?.attributes.where((a) => a.name.local == 'ascii').map((a) => a.value).firstOrNull;
+          if (fontValue != null) attrs['font'] = fontValue;
+        }
+        for (final textElement in run.descendants.whereType<XmlElement>().where((e) => e.name.local == 't')) {
+          if (textElement.innerText.isNotEmpty) operations.add({'insert': textElement.innerText, if (attrs.isNotEmpty) 'attributes': attrs});
+        }
+        for (final blip in run.descendants.whereType<XmlElement>().where((e) => e.name.local == 'blip')) {
+          final rid = blip.attributes.where((a) => a.name.local == 'embed').map((a) => a.value).firstOrNull;
+          final target = rid == null ? null : relationships[rid];
+          if (target == null) continue;
+          final mediaPath = target.startsWith('/') ? target.substring(1) : 'word/$target';
+          final normalized = mediaPath.replaceAll('word/../', '');
+          final mediaFile = zip.findFile(normalized) ?? zip.findFile(mediaPath);
+          if (mediaFile == null) continue;
+          final ext = normalized.contains('.') ? normalized.substring(normalized.lastIndexOf('.')) : '.png';
+          final path = '\${imageDir.path}/imported_\${DateTime.now().microsecondsSinceEpoch}_\${imagePaths.length}$ext';
+          await File(path).writeAsBytes(mediaFile.content as List<int>);
+          imagePaths.add(path);
+          operations.add({'insert': {'image': path}});
+        }
+      }
+      operations.add({'insert': '\n', if (lineAttrs.isNotEmpty) 'attributes': lineAttrs});
+    }
+    if (operations.isEmpty) return null;
+    final plain = operations.where((op) => op['insert'] is String).map((op) => op['insert'] as String).join().trim();
+    final title = plain.split('\n').firstOrNull?.trim() ?? '';
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    return Note(id, title, '__quill_note_v1__\${jsonEncode(operations.skipWhile((op) => op['insert'] is String && (op['insert'] as String).trim().isEmpty).toList())}', DateTime.now(), imagePaths);
   }
 
   Future<void> importDocx() async {
