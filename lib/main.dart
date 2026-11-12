@@ -321,8 +321,8 @@ class _NotesPageState extends State<NotesPage> {
           final rid = blip.attributes.where((a) => a.name.local == 'embed').map((a) => a.value).firstOrNull;
           final target = rid == null ? null : relationships[rid];
           if (target == null) continue;
-          final mediaPath = target.startsWith('/') ? target.substring(1) : 'word/$target';
-          final normalized = mediaPath.replaceAll('word/../', '');
+          final mediaPath = target.startsWith('/') ? target.substring(1) : target.startsWith('../') ? 'word/${target.substring(3)}' : 'word/$target';
+          final normalized = mediaPath;
           final mediaFile = zip.findFile(normalized) ?? zip.findFile(mediaPath);
           if (mediaFile == null) continue;
           final ext = normalized.contains('.') ? normalized.substring(normalized.lastIndexOf('.')) : '.png';
@@ -643,7 +643,14 @@ class _EditorPageState extends State<EditorPage> {
               config: quill.QuillEditorConfig(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 placeholder: 'متن یادداشتت را اینجا بنویس...',
-                embedBuilders: FlutterQuillEmbeds.editorBuilders(),
+                embedBuilders: FlutterQuillEmbeds.editorBuilders(
+                  imageEmbedConfig: quill.QuillEditorImageEmbedConfig(
+                    imageProviderBuilder: (context, imageUrl) {
+                      final local = File(imageUrl);
+                      return local.existsSync() ? FileImage(local) : null;
+                    },
+                  ),
+                ),
               ),
             ),
           ),
