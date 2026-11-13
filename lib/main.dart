@@ -817,31 +817,6 @@ class _EditorPageState extends State<EditorPage> {
     textDirection: TextDirection.rtl,
     child: Scaffold(
       appBar: AppBar(title: const Text('یادداشت'), actions: [
-        PopupMenuButton<String>(
-          tooltip: 'ابزارهای بیشتر',
-          onSelected: (value) {
-            if (value == 'font_size') setNumericFontSize();
-            if (value == 'voice') toggleRecording();
-          },
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'font_size',
-              child: ListTile(
-                dense: true,
-                leading: Icon(Icons.format_size),
-                title: Text('اندازه عددی متن'),
-              ),
-            ),
-            PopupMenuItem(
-              value: 'voice',
-              child: ListTile(
-                dense: true,
-                leading: Icon(isRecording ? Icons.stop_circle_outlined : Icons.mic_none),
-                title: Text(isRecording ? 'پایان ضبط ویس' : 'افزودن ویس'),
-              ),
-            ),
-          ],
-        ),
         TextButton.icon(onPressed: save, icon: const Icon(Icons.check), label: const Text('ذخیره')),
       ]),
       backgroundColor: Color(themeColor),
@@ -860,6 +835,18 @@ class _EditorPageState extends State<EditorPage> {
             config: quill.QuillSimpleToolbarConfig(
               multiRowsDisplay: false,
               embedButtons: FlutterQuillEmbeds.toolbarButtons(),
+              customButtons: [
+                QuillToolbarCustomButtonOptions(
+                  icon: const Icon(Icons.format_size),
+                  tooltip: 'اندازه عددی متن',
+                  onPressed: setNumericFontSize,
+                ),
+                QuillToolbarCustomButtonOptions(
+                  icon: Icon(isRecording ? Icons.stop_circle_outlined : Icons.mic_none),
+                  tooltip: isRecording ? 'پایان ضبط ویس' : 'افزودن ویس',
+                  onPressed: toggleRecording,
+                ),
+              ],
               showFontFamily: true,
               showFontSize: true,
               showBoldButton: true,
