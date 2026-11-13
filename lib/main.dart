@@ -5,6 +5,8 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
+import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:xml/xml.dart';
 import 'package:flutter/material.dart';
@@ -78,12 +80,13 @@ class Note {
   final String id, title, body;
   final DateTime updated;
   final List<String> images;
+  final List<String> audios;
   final int themeColor, themeTextColor;
   final String themeFontFamily;
   final String? folderId;
-  const Note(this.id, this.title, this.body, this.updated, [this.images = const [], this.themeColor = 0xFFEDE7F6, this.themeTextColor = 0xFF24212A, this.themeFontFamily = 'sans-serif', this.folderId]);
-  Map<String, dynamic> toJson() => {'id':id,'title':title,'body':body,'updated':updated.toIso8601String(),'images':images,'themeColor':themeColor,'themeTextColor':themeTextColor,'themeFontFamily':themeFontFamily,'folderId':folderId};
-  factory Note.fromJson(Map<String,dynamic> j) => Note(j['id'],j['title'],j['body'],DateTime.parse(j['updated']),List<String>.from(j['images'] ?? const []),j['themeColor'] ?? 0xFFEDE7F6,j['themeTextColor'] ?? 0xFF24212A,j['themeFontFamily'] ?? 'sans-serif',j['folderId'] as String?);
+  const Note(this.id, this.title, this.body, this.updated, [this.images = const [], this.themeColor = 0xFFEDE7F6, this.themeTextColor = 0xFF24212A, this.themeFontFamily = 'sans-serif', this.folderId, this.audios = const []]);
+  Map<String, dynamic> toJson() => {'id':id,'title':title,'body':body,'updated':updated.toIso8601String(),'images':images,'themeColor':themeColor,'themeTextColor':themeTextColor,'themeFontFamily':themeFontFamily,'folderId':folderId,'audios':audios};
+  factory Note.fromJson(Map<String,dynamic> j) => Note(j['id'],j['title'],j['body'],DateTime.parse(j['updated']),List<String>.from(j['images'] ?? const []),j['themeColor'] ?? 0xFFEDE7F6,j['themeTextColor'] ?? 0xFF24212A,j['themeFontFamily'] ?? 'sans-serif',j['folderId'] as String?,List<String>.from(j['audios'] ?? const []));
 }
 
 class NoteFolder {
@@ -160,7 +163,7 @@ class _NotesPageState extends State<NotesPage> {
     )));
     if(destination==null)return;
     final id=destination.isEmpty?null:destination;
-    setState((){final i=notes.indexWhere((n)=>n.id==note.id);if(i>=0){final n=notes[i];notes[i]=Note(n.id,n.title,n.body,n.updated,List.of(n.images),n.themeColor,n.themeTextColor,n.themeFontFamily,id);}});
+    setState((){final i=notes.indexWhere((n)=>n.id==note.id);if(i>=0){final n=notes[i];notes[i]=Note(n.id,n.title,n.body,n.updated,List.of(n.images),n.themeColor,n.themeTextColor,n.themeFontFamily,id,List.of(n.audios));}});
     await persist();
   }
   Future<void> persistThemes() async {
@@ -623,6 +626,10 @@ class EditorPage extends StatefulWidget {
 class _EditorPageState extends State<EditorPage> {
   late final TextEditingController title;
   late final quill.QuillController controller;
+  final AudioRecorder recorder = AudioRecorder();
+  final AudioPlayer audioPlayer = AudioPlayer();
+  final List<String> audioPaths = [];
+  bool isRecording = false;
   late int themeColor, themeTextColor;
   late String themeFontFamily;
   String? folderId;
@@ -667,6 +674,7 @@ class _EditorPageState extends State<EditorPage> {
     themeTextColor = widget.note?.themeTextColor ?? widget.initialTheme.textColor;
     themeFontFamily = widget.note?.themeFontFamily ?? widget.initialTheme.fontFamily;
     folderId = widget.note?.folderId ?? widget.initialFolderId;
+    audioPaths.addAll(widget.note?.audios ?? const []);
   }
 
   Future<void> addImage() async {
@@ -685,6 +693,41 @@ class _EditorPageState extends State<EditorPage> {
     controller.updateSelection(TextSelection.collapsed(offset: index + 2), quill.ChangeSource.local);
   }
 
+  Future<void> toggleRecording() async {
+    if(isRecording){
+      final path=await recorder.stop();
+      if(path!=null&&mounted)setState(()=>audioPaths.add(path));
+      if(mounted)setState(()=>isRecording=false);
+      return;
+    }
+    if(!await recorder.hasPermission()){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('برای ضبط صدا، اجازه دسترسی به میکروفون را فعال کن.')));
+      return;
+    }
+    final dir=await getApplicationDocumentsDirectory();
+    final folder=Directory(dir.path+'/notebook_audio');
+    if(!await folder.exists())await folder.create(recursive:true);
+    final path=folder.path+'/voice_'+DateTime.now().microsecondsSinceEpoch.toString()+'.m4a';
+    await recorder.start(const RecordConfig(encoder:AudioEncoder.aacLc),path:path);
+    if(mounted)setState(()=>isRecording=true);
+  }
+
+  Future<void> playAudio(String path) async {
+    await audioPlayer.stop();
+    await audioPlayer.play(DeviceFileSource(path));
+  }
+
+  Future<void> setNumericFontSize() async {
+    final input=TextEditingController(text:'16');
+    final value=await showDialog<double>(context:context,builder:(ctx)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
+      title:const Text('اندازه متن'),
+      content:TextField(controller:input,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'اندازه بر حسب پوینت',hintText:'مثلاً 16')),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('انصراف')),FilledButton(onPressed:(){final n=double.tryParse(input.text.trim());if(n!=null&&n>=6&&n<=96)Navigator.pop(ctx,n);},child:const Text('اعمال'))],
+    )));
+    input.dispose();
+    if(value!=null){controller.formatSelection(quill.Attribute.fromKeyValue('size',value.toString()));}
+  }
+
   void save() {
     final delta = controller.document.toDelta().toJson();
     final plain = controller.document.toPlainText().trim();
@@ -700,13 +743,15 @@ class _EditorPageState extends State<EditorPage> {
     Navigator.pop(context, Note(
       widget.note?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
       title.text.trim(), marker + jsonEncode(delta), DateTime.now(), imagePaths,
-      themeColor, themeTextColor, themeFontFamily, folderId,
+      themeColor, themeTextColor, themeFontFamily, folderId, List.of(audioPaths),
     ));
   }
 
   @override
   void dispose() {
     title.dispose();
+    recorder.dispose();
+    audioPlayer.dispose();
     controller.dispose();
     super.dispose();
   }
@@ -728,6 +773,11 @@ class _EditorPageState extends State<EditorPage> {
             decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
           ),
           const SizedBox(height: 8),
+          Align(alignment:Alignment.centerRight,child:Wrap(spacing:8,runSpacing:4,children:[
+            OutlinedButton.icon(onPressed:setNumericFontSize,icon:const Icon(Icons.format_size),label:const Text('اندازه عددی متن')),
+            OutlinedButton.icon(onPressed:toggleRecording,icon:Icon(isRecording?Icons.stop_circle_outlined:Icons.mic_none),label:Text(isRecording?'پایان ضبط':'ضبط ویس')),
+          ])),
+          if(audioPaths.isNotEmpty) SizedBox(height:54,child:ListView(scrollDirection:Axis.horizontal,children:[for(var i=0;i<audioPaths.length;i++)Padding(padding:const EdgeInsets.only(left:8),child:Chip(avatar:IconButton(icon:const Icon(Icons.play_arrow,size:18),onPressed:()=>playAudio(audioPaths[i])),label:Text('ویس ${i+1}'),onDeleted:()=>setState(()=>audioPaths.removeAt(i))))])),
           quill.QuillSimpleToolbar(
             controller: controller,
             config: quill.QuillSimpleToolbarConfig(
