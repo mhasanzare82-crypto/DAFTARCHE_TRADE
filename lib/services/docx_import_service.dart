@@ -22,7 +22,7 @@ class DocxImportService {
       throw const FormatException('ساختار DOCX معتبر نیست؛ document.xml پیدا نشد.');
     }
     final document = XmlDocument.parse(utf8.decode(documentFile.content as List<int>));
-    final body = _firstDescendant(document, 'body');
+    final body = _descendant(document, 'body');
     if (body == null) throw const FormatException('بدنه سند Word پیدا نشد.');
 
     final relationships = _readRelationships(archive);
