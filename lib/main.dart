@@ -105,7 +105,7 @@ class _NotesPageState extends State<NotesPage> {
   static const defaultThemes=[NoteTheme('یاسی',0xFFEDE7F6),NoteTheme('آبی',0xFFE3F2FD),NoteTheme('سبز',0xFFE8F5E9),NoteTheme('صورتی',0xFFFCE4EC),NoteTheme('هلویی',0xFFFFEAD5)];
 
   @override
-  void initState(){super.initState();search.addListener(()=>setState((){}));load();}
+  void initState(){super.initState();search.addListener(()=>setState((){}));noteAudioPlayer.onPlayerComplete.listen((_){if(mounted)setState(()=>currentlyPlayingAudio=null);});load();}
   Future<void> load() async {
     try {
       final loadedNotes = await repository.loadNotes();
@@ -219,7 +219,7 @@ class _NotesPageState extends State<NotesPage> {
   }
   Future<void> edit([Note? note]) async {
     final selected=note==null?(themes.isEmpty?defaultThemes.first:themes[Random().nextInt(themes.length)]):NoteTheme('فعلی',note.themeColor,note.themeTextColor,note.themeFontFamily);
-    final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note,themes:themes,initialTheme:selected,initialFolderId:note?.folderId??selectedFolderId)));
+    final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,initialFolderId:note?.folderId??selectedFolderId)));
     if(result==null)return;
     setState(() { final i=notes.indexWhere((n)=>n.id==result.id); if(i<0){notes.add(result);}else{notes[i]=result;} });
     await persist();
@@ -576,6 +576,11 @@ class _NotesPageState extends State<NotesPage> {
       return;
     }
     try {
+      if (currentlyPlayingAudio == path && noteAudioPlayer.state == PlayerState.playing) {
+        await noteAudioPlayer.pause();
+        if (mounted) setState(() => currentlyPlayingAudio = null);
+        return;
+      }
       await noteAudioPlayer.stop();
       if (!mounted) return;
       setState(() => currentlyPlayingAudio = path);
@@ -672,9 +677,10 @@ class _NotesPageState extends State<NotesPage> {
 class EditorPage extends StatefulWidget {
   final Note? note;
   final List<NoteTheme> themes;
+  final List<String> customFonts;
   final NoteTheme initialTheme;
   final String? initialFolderId;
-  const EditorPage({super.key,this.note,required this.themes,required this.initialTheme, this.initialFolderId});
+  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme, this.initialFolderId});
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
@@ -686,10 +692,13 @@ class _EditorPageState extends State<EditorPage> {
   final AudioPlayer audioPlayer = AudioPlayer();
   final List<String> audioPaths = [];
   bool isRecording = false;
+  String? currentlyPlayingEditorAudio;
   late int themeColor, themeTextColor;
   late String themeFontFamily;
   String? folderId;
   static const marker = '__quill_note_v1__';
+  static const builtInToolbarFonts = ['sans-serif','serif','monospace','sans-serif-condensed','sans-serif-light','sans-serif-medium','cursive'];
+  Map<String, String> get toolbarFontFamilies => {for (final family in {...builtInToolbarFonts, ...widget.customFonts, themeFontFamily}) family: family};
 
   quill.Document _loadDocument(String? body, List<String> legacyImages) {
     if (body != null && body.startsWith(marker)) {
@@ -722,6 +731,7 @@ class _EditorPageState extends State<EditorPage> {
     super.initState();
     title = TextEditingController(text: widget.note?.title ?? '');
     final doc = _loadDocument(widget.note?.body, widget.note?.images ?? const []);
+    audioPlayer.onPlayerComplete.listen((_) { if (mounted) setState(() => currentlyPlayingEditorAudio = null); });
     controller = quill.QuillController(
       document: doc,
       selection: const TextSelection.collapsed(offset: 0),
@@ -769,8 +779,19 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   Future<void> playAudio(String path) async {
-    await audioPlayer.stop();
-    await audioPlayer.play(DeviceFileSource(path));
+    try {
+      if (currentlyPlayingEditorAudio == path && audioPlayer.state == PlayerState.playing) {
+        await audioPlayer.pause();
+        if (mounted) setState(() => currentlyPlayingEditorAudio = null);
+        return;
+      }
+      await audioPlayer.stop();
+      if (!mounted) return;
+      setState(() => currentlyPlayingEditorAudio = path);
+      await audioPlayer.play(DeviceFileSource(path));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('پخش ویس ناموفق بود: $error')));
+    }
   }
 
   Future<void> setNumericFontSize() async {
@@ -778,7 +799,7 @@ class _EditorPageState extends State<EditorPage> {
     final value=await showDialog<double>(context:context,builder:(ctx)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
       title:const Text('اندازه متن'),
       content:TextField(controller:input,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'اندازه بر حسب پوینت',hintText:'مثلاً 16')),
-      actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('انصراف')),FilledButton(onPressed:(){final n=double.tryParse(input.text.trim());if(n!=null&&n>=6&&n<=96)Navigator.pop(ctx,n);},child:const Text('اعمال'))],
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('انصراف')),FilledButton(onPressed:(){final n=double.tryParse(input.text.trim());if(n!=null&&n>=6&&n<=42)Navigator.pop(ctx,n);},child:const Text('اعمال'))],
     )));
     input.dispose();
     if(value!=null){controller.formatSelection(quill.Attribute.fromKeyValue('size',value.toString()));}
@@ -829,10 +850,14 @@ class _EditorPageState extends State<EditorPage> {
             decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
           ),
           const SizedBox(height: 8),
-          if(audioPaths.isNotEmpty) SizedBox(height:54,child:ListView(scrollDirection:Axis.horizontal,children:[for(var i=0;i<audioPaths.length;i++)Padding(padding:const EdgeInsets.only(left:8),child:Chip(avatar:IconButton(icon:const Icon(Icons.play_arrow,size:18),onPressed:()=>playAudio(audioPaths[i])),label:Text('ویس ${i+1}'),onDeleted:()=>setState(()=>audioPaths.removeAt(i))))])),
+          if(audioPaths.isNotEmpty) SizedBox(height:54,child:ListView(scrollDirection:Axis.horizontal,children:[for(var i=0;i<audioPaths.length;i++)Padding(padding:const EdgeInsets.only(left:8),child:Chip(avatar:IconButton(tooltip:currentlyPlayingEditorAudio==audioPaths[i]?'مکث ویس':'پخش ویس',icon:Icon(currentlyPlayingEditorAudio==audioPaths[i]?Icons.pause:Icons.play_arrow,size:18),onPressed:()=>playAudio(audioPaths[i])),label:Text('ویس ${i+1}'),onDeleted:()=>setState(()=>audioPaths.removeAt(i))))])),
           quill.QuillSimpleToolbar(
             controller: controller,
             config: quill.QuillSimpleToolbarConfig(
+              buttonOptions: quill.QuillSimpleToolbarButtonOptions(
+                fontFamily: quill.QuillToolbarFontFamilyButtonOptions(items: toolbarFontFamilies),
+                fontSize: quill.QuillToolbarFontSizeButtonOptions(items: {for (var size = 6; size <= 42; size++) '$size': '$size'}),
+              ),
               multiRowsDisplay: false,
               embedButtons: FlutterQuillEmbeds.toolbarButtons(),
               customButtons: [
