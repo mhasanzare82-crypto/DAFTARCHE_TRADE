@@ -163,7 +163,14 @@ class _NotesPageState extends State<NotesPage> {
     await persist();
   }
   Future<void> manageThemes() async {
-    final result=await showDialog<List<NoteTheme>>(context:context,builder:(context)=>ThemeManagerDialog(initialThemes:List.of(themes),customFonts:customFonts.keys.toList()));
+    final result=await showDialog<List<NoteTheme>>(context:context,builder:(context)=>ThemeManagerDialog(
+      initialThemes:List.of(themes),
+      customFonts:customFonts.keys.toList(),
+      onAddCustomFont:() async {
+        await addCustomFont();
+        return customFonts.keys.toList();
+      },
+    ));
     if(result!=null){
       setState((){themes..clear()..addAll(result);});
       await persistThemes();
