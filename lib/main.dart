@@ -19,6 +19,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models/note.dart';
+import 'data/notebook_repository.dart';
 
 const String _quillNoteMarker = '__quill_note_v1__';
 const String _legacyRichNoteMarker = '__rich_note_v1__';
@@ -101,24 +102,37 @@ class _NotesPageState extends State<NotesPage> {
   @override
   void initState(){super.initState();search.addListener(()=>setState((){}));load();}
   Future<void> load() async {
-    final p=await SharedPreferences.getInstance();
-    try { notes.addAll((jsonDecode(p.getString('notebook_notes')??'[]') as List).map((e)=>Note.fromJson(e))); } catch(_){}
-    try { themes.addAll((jsonDecode(p.getString('notebook_themes')??'[]') as List).map((e)=>NoteTheme.fromJson(e))); } catch(_){}
-    try { folders.addAll((jsonDecode(p.getString('notebook_folders')??'[]') as List).map((e)=>NoteFolder.fromJson(e))); } catch(_){}
-    try { customFonts.addAll(Map<String,String>.from(jsonDecode(p.getString('notebook_custom_fonts')??'{}'))); } catch(_){}
-    for(final entry in customFonts.entries){try{final file=File(entry.value);if(await file.exists()){final bytes=await file.readAsBytes();final loader=FontLoader(entry.key)..addFont(Future.value(ByteData.sublistView(bytes)));await loader.load();}}catch(_){}}
-    if(themes.isEmpty) themes.addAll(defaultThemes);
-    if(mounted)setState(()=>loading=false);
-    await persistThemes();
+    try {
+      final results = await Future.wait([
+        repository.loadNotes(), repository.loadThemes(), repository.loadFolders(), repository.loadCustomFonts(),
+      ]);
+      notes.addAll(results[0] as List<Note>);
+      themes.addAll(results[1] as List<NoteTheme>);
+      folders.addAll(results[2] as List<NoteFolder>);
+      customFonts.addAll(results[3] as Map<String, String>);
+      for (final entry in customFonts.entries) {
+        try {
+          final file = File(entry.value);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            final loader = FontLoader(entry.key)..addFont(Future.value(ByteData.sublistView(bytes)));
+            await loader.load();
+          }
+        } catch (_) { /* An unavailable custom font must not block opening the notebook. */ }
+      }
+      if (themes.isEmpty) themes.addAll(defaultThemes);
+      if (mounted) setState(() => loading = false);
+      await persistThemes();
+    } catch (error, stackTrace) {
+      debugPrint('Notebook load failed: $error\\n$stackTrace');
+      if (mounted) setState(() => loading = false);
+    }
   }
-  Future<void> persist() async {
-    final p=await SharedPreferences.getInstance();
-    await p.setString('notebook_notes',jsonEncode(notes.map((n)=>n.toJson()).toList()));
-  }
-  Future<void> persistFolders() async {
-    final p=await SharedPreferences.getInstance();
-    await p.setString('notebook_folders',jsonEncode(folders.map((f)=>f.toJson()).toList()));
-  }
+
+  Future<void> persist() => repository.saveNotes(notes);
+  Future<void> persistFolders() => repository.saveFolders(folders);
+  Future<void> persistThemes() => repository.saveThemes(themes);
+
   Future<void> createFolder() async {
     final controller=TextEditingController();
     final name=await showDialog<String>(context:context,builder:(c)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
@@ -177,8 +191,7 @@ class _NotesPageState extends State<NotesPage> {
       return;
     }
     customFonts[family]=saved.path;
-    final prefs=await SharedPreferences.getInstance();
-    await prefs.setString('notebook_custom_fonts',jsonEncode(customFonts));
+    await repository.saveCustomFonts(customFonts);
     if(mounted){setState((){});ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('فونت «'+original+'» اضافه شد. اکنون نام آن را در بخش فونت تم انتخاب کن.')));}
   }
   List<Note> get filtered {
