@@ -389,8 +389,27 @@ class _NotesPageState extends State<NotesPage> {
     final operations = <Map<String, dynamic>>[];
     final imagePaths = <String>[];
     final paragraphs = xml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'p').toList();
-    final importedTitle = paragraphs.isEmpty ? '' : paragraphs.first.descendants.whereType<XmlElement>().where((e) => e.name.local == 't').map((e) => e.innerText).join().trim();
-    for (final paragraph in paragraphs.skip(1)) {
+    // Only treat the first paragraph as the note title when the DOCX explicitly
+    // marks it as Title/Subtitle. Ordinary first paragraphs are document content
+    // and must never be silently discarded during import.
+    final firstParagraph = paragraphs.isEmpty ? null : paragraphs.first;
+    final firstStyle = firstParagraph?.children
+        .whereType<XmlElement>()
+        .where((e) => e.name.local == 'pPr')
+        .firstOrNull
+        ?.descendants.whereType<XmlElement>()
+        .where((e) => e.name.local == 'pStyle')
+        .firstOrNull
+        ?.attributes.where((a) => a.name.local == 'val')
+        .map((a) => a.value).firstOrNull ?? '';
+    final hasTitleParagraph = firstStyle.toLowerCase() == 'title' ||
+        firstStyle.toLowerCase() == 'subtitle';
+    final importedTitle = hasTitleParagraph
+        ? firstParagraph!.descendants.whereType<XmlElement>()
+            .where((e) => e.name.local == 't')
+            .map((e) => e.innerText).join().trim()
+        : '';
+    for (final paragraph in paragraphs.skip(hasTitleParagraph ? 1 : 0)) {
       final pPr = paragraph.children.whereType<XmlElement>().where((e) => e.name.local == 'pPr').firstOrNull;
       final lineAttrs = <String, dynamic>{};
       if (pPr != null) {
@@ -452,17 +471,46 @@ class _NotesPageState extends State<NotesPage> {
 
   Future<void> importDocx() async {
     try {
-      final files = await FilePicker.pickFiles(type: FileType.custom,
-          allowedExtensions: ['docx']);
-      if (files.isEmpty) return;
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['docx'],
+        withData: true,
+      );
+      if (files == null || files.files.isEmpty) return;
       final imported = <Note>[];
-      for (final file in files) {
-        try { final note = await _noteFromDocx(file); if (note != null) imported.add(note); } catch (_) {}
+      final failures = <String>[];
+      for (final file in files.files) {
+        try {
+          final note = await _noteFromDocx(file);
+          if (note != null) {
+            imported.add(note);
+          } else {
+            failures.add(file.name);
+          }
+        } catch (error) {
+          debugPrint('DOCX import failed for ${file.name}: $error');
+          failures.add(file.name);
+        }
       }
-      if (imported.isNotEmpty) { setState(() => notes.addAll(imported)); await persist(); }
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${imported.length} فایل Word وارد شد')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ورود فایل‌ها انجام نشد: $e')));
+      if (imported.isNotEmpty) {
+        setState(() => notes.addAll(imported));
+        await persist();
+      }
+      if (mounted) {
+        final message = failures.isEmpty
+            ? '${imported.length} فایل Word با موفقیت وارد شد'
+            : '${imported.length} فایل وارد شد؛ ${failures.length} فایل ناموفق بود: ${failures.take(2).join('، ')}';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
+    } catch (error) {
+      debugPrint('DOCX import selection failed: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ورود فایل‌ها انجام نشد: $error')),
+        );
+      }
     }
   }
 
