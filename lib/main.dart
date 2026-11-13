@@ -97,6 +97,8 @@ class _NotesPageState extends State<NotesPage> {
   final themes=<NoteTheme>[];
   final folders=<NoteFolder>[];
   final search=TextEditingController();
+  final AudioPlayer noteAudioPlayer = AudioPlayer();
+  String? currentlyPlayingAudio;
   String? selectedFolderId;
   bool loading=true;
   final customFonts=<String, String>{};
@@ -563,6 +565,31 @@ class _NotesPageState extends State<NotesPage> {
     }
   }
 
+  Future<void> playNoteAudio(String path) async {
+    final file = File(path);
+    if (!await file.exists()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('فایل ویس پیدا نشد.')),
+        );
+      }
+      return;
+    }
+    try {
+      await noteAudioPlayer.stop();
+      if (!mounted) return;
+      setState(() => currentlyPlayingAudio = path);
+      await noteAudioPlayer.play(DeviceFileSource(path));
+    } catch (error) {
+      if (mounted) {
+        setState(() => currentlyPlayingAudio = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('پخش ویس ناموفق بود: $error')),
+        );
+      }
+    }
+  }
+
   void showNoteMenu(Note note) {
     showModalBottomSheet<void>(context: context, builder: (sheetContext) =>
       Directionality(textDirection: TextDirection.rtl, child: SafeArea(child: Wrap(children: [
@@ -583,7 +610,7 @@ class _NotesPageState extends State<NotesPage> {
 
   String date(DateTime d)=>d.year.toString()+'/'+d.month.toString().padLeft(2,'0')+'/'+d.day.toString().padLeft(2,'0');
   @override
-  void dispose(){search.dispose();super.dispose();}
+  void dispose(){search.dispose();noteAudioPlayer.dispose();super.dispose();}
   @override
   Widget build(BuildContext context){
     final items=filtered;
@@ -612,6 +639,28 @@ class _NotesPageState extends State<NotesPage> {
               Row(children:[Expanded(child:Text(n.title.isEmpty?'بدون عنوان':n.title,style:TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily))),IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))]),
               if(_notePlainText(n.body).isNotEmpty)Text(_notePlainText(n.body),maxLines:3,overflow:TextOverflow.ellipsis,style:TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),
               if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Color(n.themeTextColor).withOpacity(.7),fontSize:12,fontFamily:n.themeFontFamily))),
+              if(n.audios.isNotEmpty)Padding(
+                padding:const EdgeInsets.only(top:8),
+                child:Wrap(
+                  spacing:6,
+                  runSpacing:4,
+                  children:[
+                    for(var audioIndex=0;audioIndex<n.audios.length;audioIndex++)
+                      ActionChip(
+                        avatar:Icon(
+                          currentlyPlayingAudio==n.audios[audioIndex]
+                              ? Icons.volume_up_rounded
+                              : Icons.play_arrow_rounded,
+                          size:18,
+                          color:Color(n.themeTextColor),
+                        ),
+                        label:Text('پخش ویس ${audioIndex+1}',style:TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),
+                        onPressed:()=>playNoteAudio(n.audios[audioIndex]),
+                        backgroundColor:Color(n.themeColor).withOpacity(.75),
+                      ),
+                  ],
+                ),
+              ),
               const SizedBox(height:8),Text(date(n.updated),style:TextStyle(fontSize:11,color:Color(n.themeTextColor).withOpacity(.65),fontFamily:n.themeFontFamily)),
             ]))));
           })),
