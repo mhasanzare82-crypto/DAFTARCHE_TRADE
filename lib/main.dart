@@ -171,8 +171,8 @@ class _NotesPageState extends State<NotesPage> {
   }
   Future<void> addCustomFont() async {
     final picked=await FilePicker.pickFiles(type:FileType.custom,allowedExtensions:['ttf','otf']);
-    if(picked==null||picked.files.isEmpty)return;
-    final file=picked.files.first;
+    if(picked.isEmpty)return;
+    final file=picked.first;
     final bytes=file.bytes ?? await File(file.path!).readAsBytes();
     final parts=file.name.split('.');
     final original=parts.length>1?parts.sublist(0,parts.length-1).join('.'):file.name;
