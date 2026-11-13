@@ -931,24 +931,6 @@ class _EditorPageState extends State<EditorPage> {
                 ],
               ),
             ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (isRecording)
-                const Padding(
-                  padding: EdgeInsets.only(left: 8),
-                  child: Text('در حال ضبط ویس...'),
-                ),
-              IconButton(
-                tooltip: isRecording ? 'پایان ضبط ویس' : 'شروع ضبط ویس',
-                icon: Icon(
-                  isRecording ? Icons.stop_circle_outlined : Icons.mic_none,
-                  color: isRecording ? Colors.red : null,
-                ),
-                onPressed: toggleRecording,
-              ),
-            ],
-          ),
           quill.QuillSimpleToolbar(
             controller: controller,
             config: quill.QuillSimpleToolbarConfig(
@@ -968,6 +950,14 @@ class _EditorPageState extends State<EditorPage> {
                   icon: const Icon(Icons.add_photo_alternate_outlined),
                   tooltip: 'افزودن عکس و نقاشی روی آن',
                   onPressed: addImage,
+                ),
+                quill.QuillToolbarCustomButtonOptions(
+                  icon: Icon(
+                    isRecording ? Icons.stop_circle_outlined : Icons.mic_none,
+                    color: isRecording ? Colors.red : null,
+                  ),
+                  tooltip: isRecording ? 'پایان ضبط ویس' : 'شروع ضبط ویس',
+                  onPressed: toggleRecording,
                 ),
               ],
               showFontFamily: true,
