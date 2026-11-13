@@ -731,6 +731,7 @@ class _EditorPageState extends State<EditorPage> {
     super.initState();
     title = TextEditingController(text: widget.note?.title ?? '');
     final doc = _loadDocument(widget.note?.body, widget.note?.images ?? const []);
+    audioPlayer.onPlayerComplete.listen((_) { if (mounted) setState(() => currentlyPlayingEditorAudio = null); });
     controller = quill.QuillController(
       document: doc,
       selection: const TextSelection.collapsed(offset: 0),
