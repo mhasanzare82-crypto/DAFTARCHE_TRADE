@@ -763,14 +763,15 @@ class _EditorPageState extends State<EditorPage> {
     );
     if (!mounted || selectedPath == null) return;
     final index = controller.selection.extentOffset.clamp(0, controller.document.length - 1);
-    // Fit the inserted image to the available editor width (screen width minus
-    // the horizontal padding of the editor page), while preserving its ratio.
+    // Set the Quill image width attribute directly. The image embed builder
+    // reads this attribute and constrains the displayed image to the editor's
+    // available width; its height remains automatic to preserve aspect ratio.
     final imageWidth = MediaQuery.sizeOf(context).width - 32;
     final imageDelta = delta.Delta()
       ..retain(index)
       ..insert(
         {'image': selectedPath},
-        {'style': 'width: ${imageWidth}px;'},
+        {'width': imageWidth},
       )
       ..insert('\n');
     controller.document.compose(imageDelta, quill.ChangeSource.local);
