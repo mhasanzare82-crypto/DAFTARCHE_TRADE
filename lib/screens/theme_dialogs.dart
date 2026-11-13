@@ -4,16 +4,29 @@ import '../models/note.dart';
 class ThemeManagerDialog extends StatefulWidget {
   final List<NoteTheme> initialThemes;
   final List<String> customFonts;
-  const ThemeManagerDialog({super.key, required this.initialThemes, this.customFonts = const []});
+  final Future<List<String>> Function()? onAddCustomFont;
+  const ThemeManagerDialog({super.key, required this.initialThemes, this.customFonts = const [], this.onAddCustomFont});
   @override
   State<ThemeManagerDialog> createState() => _ThemeManagerDialogState();
 }
 class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
   late List<NoteTheme> items;
+  late List<String> availableFonts;
+  bool addingFont = false;
   @override
-  void initState() { super.initState(); items = List.of(widget.initialThemes); }
+  void initState() { super.initState(); items = List.of(widget.initialThemes); availableFonts = List.of(widget.customFonts); }
+  Future<void> addFont() async {
+    if (widget.onAddCustomFont == null || addingFont) return;
+    setState(() => addingFont = true);
+    try {
+      final updated = await widget.onAddCustomFont!();
+      if (mounted) setState(() => availableFonts = List.of(updated));
+    } finally {
+      if (mounted) setState(() => addingFont = false);
+    }
+  }
   Future<void> editTheme([NoteTheme? old]) async {
-    final result = await showDialog<NoteTheme>(context: context, builder: (_) => ThemeEditorDialog(theme: old, customFonts: widget.customFonts));
+    final result = await showDialog<NoteTheme>(context: context, builder: (_) => ThemeEditorDialog(theme: old, customFonts: availableFonts));
     if (result == null) return;
     setState(() {
       if (old == null) { items.add(result); }
@@ -62,6 +75,13 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
                 ),
         ),
         actions: [
+          TextButton.icon(
+            onPressed: addingFont ? null : addFont,
+            icon: addingFont
+                ? const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2))
+                : const Icon(Icons.upload_file_outlined),
+            label: Text(addingFont ? 'در حال افزودن...' : 'افزودن فونت'),
+          ),
           TextButton.icon(onPressed: () => editTheme(), icon: const Icon(Icons.add), label: const Text('ساخت تم')),
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
           FilledButton(onPressed: () => Navigator.pop(context, items), child: const Text('ذخیره')),
