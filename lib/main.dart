@@ -224,11 +224,11 @@ class _NotesPageState extends State<NotesPage> {
     final q = query.trim();
     if (q.isEmpty) return source;
     final matchingLines = source
-        .split('\\n')
+        .split('\n')
         .where((line) => line.toLowerCase().contains(q.toLowerCase()))
         .take(3)
         .toList();
-    return matchingLines.isEmpty ? source : matchingLines.join('\\n');
+    return matchingLines.isEmpty ? source : matchingLines.join('\n');
   }
 
   TextSpan _highlightSearchText(String value, String query, TextStyle baseStyle) {
