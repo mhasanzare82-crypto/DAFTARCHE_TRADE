@@ -53,8 +53,8 @@ class DocxImportService {
           : Map<String, dynamic>.from(attributes);
       if (operations.isNotEmpty &&
           operations.last['insert'] is String &&
-          !(operations.last['insert'] as String).endsWith('\\n') &&
-          !value.startsWith('\\n') &&
+          !(operations.last['insert'] as String).endsWith('\n') &&
+          !value.startsWith('\n') &&
           _sameAttributes(operations.last['attributes'] as Map?, attrs)) {
         operations.last['insert'] = (operations.last['insert'] as String) + value;
       } else {
