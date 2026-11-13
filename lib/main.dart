@@ -788,6 +788,14 @@ class _EditorPageState extends State<EditorPage> {
 
   Future<void> playAudio(String path) async {
     try {
+      if (!await File(path).exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('فایل ویس پیدا نشد.')),
+          );
+        }
+        return;
+      }
       if (currentlyPlayingEditorAudio == path && audioPlayer.state == PlayerState.playing) {
         await audioPlayer.pause();
         if (mounted) setState(() => currentlyPlayingEditorAudio = null);
@@ -796,9 +804,14 @@ class _EditorPageState extends State<EditorPage> {
       await audioPlayer.stop();
       if (!mounted) return;
       setState(() => currentlyPlayingEditorAudio = path);
-      await audioPlayer.play(DeviceFileSource(path));
+      await audioPlayer.play(DeviceFileSource(path), mode: PlayerMode.mediaPlayer);
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('پخش ویس ناموفق بود: $error')));
+      if (mounted) {
+        setState(() => currentlyPlayingEditorAudio = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('پخش ویس ناموفق بود: $error')),
+        );
+      }
     }
   }
 
@@ -853,12 +866,11 @@ class _EditorPageState extends State<EditorPage> {
         padding: const EdgeInsets.all(16),
         child: Column(children: [
           TextField(
-            controller: title, autofocus: true,
+            controller: title, autofocus: false,
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: themeFontFamily),
             decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
           ),
           const SizedBox(height: 8),
-          if(audioPaths.isNotEmpty) SizedBox(height:54,child:ListView(scrollDirection:Axis.horizontal,children:[for(var i=0;i<audioPaths.length;i++)Padding(padding:const EdgeInsets.only(left:8),child:Chip(avatar:IconButton(tooltip:currentlyPlayingEditorAudio==audioPaths[i]?'مکث ویس':'پخش ویس',icon:Icon(currentlyPlayingEditorAudio==audioPaths[i]?Icons.pause:Icons.play_arrow,size:18),onPressed:()=>playAudio(audioPaths[i])),label:Text('ویس ${i+1}'),onDeleted:()=>setState(()=>audioPaths.removeAt(i))))])),
           Expanded(
             child: quill.QuillEditor.basic(
               controller: controller,
@@ -877,6 +889,53 @@ class _EditorPageState extends State<EditorPage> {
             ),
           ),
           const Divider(height: 1),
+          if (audioPaths.isNotEmpty)
+            SizedBox(
+              height: 52,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (var i = 0; i < audioPaths.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: InputChip(
+                        avatar: Icon(
+                          currentlyPlayingEditorAudio == audioPaths[i]
+                              ? Icons.pause_circle_filled
+                              : Icons.play_circle_fill,
+                        ),
+                        label: Text('پخش ویس ${i + 1}'),
+                        onPressed: () => playAudio(audioPaths[i]),
+                        onDeleted: () => setState(() {
+                          if (currentlyPlayingEditorAudio == audioPaths[i]) {
+                            audioPlayer.stop();
+                            currentlyPlayingEditorAudio = null;
+                          }
+                          audioPaths.removeAt(i);
+                        }),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (isRecording)
+                const Padding(
+                  padding: EdgeInsets.only(left: 8),
+                  child: Text('در حال ضبط ویس...'),
+                ),
+              IconButton(
+                tooltip: isRecording ? 'پایان ضبط ویس' : 'شروع ضبط ویس',
+                icon: Icon(
+                  isRecording ? Icons.stop_circle_outlined : Icons.mic_none,
+                  color: isRecording ? Colors.red : null,
+                ),
+                onPressed: toggleRecording,
+              ),
+            ],
+          ),
           quill.QuillSimpleToolbar(
             controller: controller,
             config: quill.QuillSimpleToolbarConfig(
@@ -896,11 +955,6 @@ class _EditorPageState extends State<EditorPage> {
                   icon: const Icon(Icons.add_photo_alternate_outlined),
                   tooltip: 'افزودن عکس و نقاشی روی آن',
                   onPressed: addImage,
-                ),
-                quill.QuillToolbarCustomButtonOptions(
-                  icon: Icon(isRecording ? Icons.stop_circle_outlined : Icons.mic_none),
-                  tooltip: isRecording ? 'پایان ضبط ویس' : 'افزودن ویس',
-                  onPressed: toggleRecording,
                 ),
               ],
               showFontFamily: true,
