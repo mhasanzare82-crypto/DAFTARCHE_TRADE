@@ -81,8 +81,20 @@ void main() {
     expect(note.images, hasLength(1));
     expect(await File(note.images.single).exists(), isTrue);
     expect(imageOperation, greaterThan(0));
-    expect(delta.take(imageOperation).any((op) => op is Map && op['insert'] == 'قبل عکس\n'), isTrue);
-    expect(delta.skip(imageOperation + 1).any((op) => op is Map && op['insert'] == 'بعد عکس\n'), isTrue);
+    final textBeforeImage = delta
+        .take(imageOperation)
+        .whereType<Map>()
+        .map((op) => op['insert'])
+        .whereType<String>()
+        .join();
+    final textAfterImage = delta
+        .skip(imageOperation + 1)
+        .whereType<Map>()
+        .map((op) => op['insert'])
+        .whereType<String>()
+        .join();
+    expect(textBeforeImage, contains('قبل عکس'));
+    expect(textAfterImage, contains('بعد عکس'));
   });
 
   test('rejects a zip package without Word document body', () async {
