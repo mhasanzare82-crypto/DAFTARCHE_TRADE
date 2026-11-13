@@ -173,7 +173,16 @@ class _NotesPageState extends State<NotesPage> {
     final picked=await FilePicker.pickFiles(type:FileType.custom,allowedExtensions:['ttf','otf']);
     if(picked.isEmpty)return;
     final file=picked.first;
-    final bytes=file.bytes ?? await File(file.path!).readAsBytes();
+    final filePath = file.path;
+    if (filePath == null || filePath.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('مسیر فایل فونت قابل دسترسی نیست.')),
+        );
+      }
+      return;
+    }
+    final bytes = await File(filePath).readAsBytes();
     final parts=file.name.split('.');
     final original=parts.length>1?parts.sublist(0,parts.length-1).join('.'):file.name;
     final family='custom_'+original.replaceAll(RegExp(r'[^A-Za-z0-9_]+'),'_')+'_'+DateTime.now().millisecondsSinceEpoch.toString();
