@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Run DOCX import regression tests
+        run: flutter test test/services/docx_import_service_test.dart
+
       - name: Build release APK
         run: flutter build apk --release
 
