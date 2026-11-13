@@ -353,14 +353,15 @@ class _NotesPageState extends State<NotesPage> {
 
   Future<Note?> _noteFromDocx(PlatformFile file) async {
     final bytes = await file.readAsBytes();
-    final zip = ZipDecoder().decodeBytes(bytes);
+    if (bytes.length < 4) throw const FormatException('فایل انتخاب‌شده خالی یا ناقص است.');
+    final zip = ZipDecoder().decodeBytes(bytes, verify: true, throwOnError: true);
     final documentFile = zip.findFile('word/document.xml');
     if (documentFile == null) return null;
-    final xml = XmlDocument.parse(utf8.decode(documentFile.content as List<int>));
+    final xml = XmlDocument.parse(utf8.decode(documentFile.readBytes(), allowMalformed: true));
     final relsFile = zip.findFile('word/_rels/document.xml.rels');
     final relationships = <String, String>{};
     if (relsFile != null) {
-      final rels = XmlDocument.parse(utf8.decode(relsFile.content as List<int>));
+      final rels = XmlDocument.parse(utf8.decode(relsFile.readBytes(), allowMalformed: true));
       for (final rel in rels.descendants.whereType<XmlElement>().where((e) => e.name.local == 'Relationship')) {
         final id = rel.attributes.where((a) => a.name.local == 'Id').map((a) => a.value).firstOrNull;
         final target = rel.attributes.where((a) => a.name.local == 'Target').map((a) => a.value).firstOrNull;
@@ -370,7 +371,7 @@ class _NotesPageState extends State<NotesPage> {
     final numberingFormats = <String, String>{};
     final numberingFile = zip.findFile('word/numbering.xml');
     if (numberingFile != null) {
-      final numberingXml = XmlDocument.parse(utf8.decode(numberingFile.content as List<int>));
+      final numberingXml = XmlDocument.parse(utf8.decode(numberingFile.readBytes(), allowMalformed: true));
       final abstractFormats = <String, String>{};
       for (final item in numberingXml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'abstractNum')) {
         final abstractId = item.attributes.where((a) => a.name.local == 'abstractNumId').map((a) => a.value).firstOrNull;
@@ -451,13 +452,19 @@ class _NotesPageState extends State<NotesPage> {
           final rid = blip.attributes.where((a) => a.name.local == 'embed').map((a) => a.value).firstOrNull;
           final target = rid == null ? null : relationships[rid];
           if (target == null) continue;
-          final mediaPath = target.startsWith('/') ? target.substring(1) : target.startsWith('../') ? 'word/${target.substring(3)}' : 'word/$target';
-          final normalized = mediaPath;
-          final mediaFile = zip.findFile(normalized) ?? zip.findFile(mediaPath);
+          // Relationship targets are relative to word/document.xml, not to the
+          // .rels file. Uri.resolve correctly handles ../ and nested folders.
+          final resolvedPath = Uri.parse('word/document.xml').resolve(target).path;
+          final normalized = Uri.decodeComponent(resolvedPath).replaceFirst(RegExp(r'^/+'), '');
+          final mediaFile = zip.findFile(normalized) ??
+              zip.findFile(target.replaceFirst(RegExp(r'^/+'), ''));
+
           if (mediaFile == null) continue;
           final ext = normalized.contains('.') ? normalized.substring(normalized.lastIndexOf('.')) : '.png';
           final path = '${imageDir.path}/imported_${DateTime.now().microsecondsSinceEpoch}_${imagePaths.length}$ext';
-          await File(path).writeAsBytes(mediaFile.content as List<int>);
+          final imageBytes = mediaFile.readBytes();
+          if (imageBytes.isEmpty) continue;
+          await File(path).writeAsBytes(imageBytes, flush: true);
           imagePaths.add(path);
           operations.add({'insert': {'image': path}});
         }
@@ -477,18 +484,18 @@ class _NotesPageState extends State<NotesPage> {
       );
       if (files.isEmpty) return;
       final imported = <Note>[];
-      final failures = <String>[];
+      final failures = <String, String>{};
       for (final file in files) {
         try {
           final note = await _noteFromDocx(file);
           if (note != null) {
             imported.add(note);
           } else {
-            failures.add(file.name);
+            failures[file.name] = 'فایل DOCX معتبر نیست یا بخش word/document.xml در آن وجود ندارد.';
           }
-        } catch (error) {
-          debugPrint('DOCX import failed for ${file.name}: $error');
-          failures.add(file.name);
+        } catch (error, stackTrace) {
+          debugPrint('DOCX import failed for ${file.name}: $error\\n$stackTrace');
+          failures[file.name] = error.toString();
         }
       }
       if (imported.isNotEmpty) {
@@ -498,7 +505,7 @@ class _NotesPageState extends State<NotesPage> {
       if (mounted) {
         final message = failures.isEmpty
             ? '${imported.length} فایل Word با موفقیت وارد شد'
-            : '${imported.length} فایل وارد شد؛ ${failures.length} فایل ناموفق بود: ${failures.take(2).join('، ')}';
+            : '${imported.length} فایل وارد شد؛ ${failures.length} فایل ناموفق بود: ${failures.keys.take(2).join('، ')}\\nعلت: ${failures.values.first}';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message)),
         );
