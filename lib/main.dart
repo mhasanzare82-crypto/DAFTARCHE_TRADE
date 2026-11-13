@@ -92,6 +92,7 @@ class NotesPage extends StatefulWidget {
   State<NotesPage> createState() => _NotesPageState();
 }
 class _NotesPageState extends State<NotesPage> {
+  final NotebookRepository repository = NotebookRepository();
   final notes=<Note>[];
   final themes=<NoteTheme>[];
   final folders=<NoteFolder>[];
@@ -105,13 +106,14 @@ class _NotesPageState extends State<NotesPage> {
   void initState(){super.initState();search.addListener(()=>setState((){}));load();}
   Future<void> load() async {
     try {
-      final results = await Future.wait([
-        repository.loadNotes(), repository.loadThemes(), repository.loadFolders(), repository.loadCustomFonts(),
-      ]);
-      notes.addAll(results[0] as List<Note>);
-      themes.addAll(results[1] as List<NoteTheme>);
-      folders.addAll(results[2] as List<NoteFolder>);
-      customFonts.addAll(results[3] as Map<String, String>);
+      final loadedNotes = await repository.loadNotes();
+      final loadedThemes = await repository.loadThemes();
+      final loadedFolders = await repository.loadFolders();
+      final loadedFonts = await repository.loadCustomFonts();
+      notes.addAll(loadedNotes);
+      themes.addAll(loadedThemes);
+      folders.addAll(loadedFolders);
+      customFonts.addAll(loadedFonts);
       for (final entry in customFonts.entries) {
         try {
           final file = File(entry.value);
@@ -160,10 +162,6 @@ class _NotesPageState extends State<NotesPage> {
     setState((){final i=notes.indexWhere((n)=>n.id==note.id);if(i>=0){final n=notes[i];notes[i]=Note(n.id,n.title,n.body,n.updated,List.of(n.images),n.themeColor,n.themeTextColor,n.themeFontFamily,id,List.of(n.audios));}});
     await persist();
   }
-  Future<void> persistThemes() async {
-    final p=await SharedPreferences.getInstance();
-    await p.setString('notebook_themes',jsonEncode(themes.map((t)=>t.toJson()).toList()));
-  }
   Future<void> manageThemes() async {
     final result=await showDialog<List<NoteTheme>>(context:context,builder:(context)=>ThemeManagerDialog(initialThemes:List.of(themes),customFonts:customFonts.keys.toList()));
     if(result!=null){
@@ -172,7 +170,7 @@ class _NotesPageState extends State<NotesPage> {
     }
   }
   Future<void> addCustomFont() async {
-    final picked=await FilePicker.pickFiles(type:FileType.custom,allowedExtensions:['ttf','otf'],withData:true);
+    final picked=await FilePicker.pickFiles(type:FileType.custom,allowedExtensions:['ttf','otf']);
     if(picked==null||picked.files.isEmpty)return;
     final file=picked.files.first;
     final bytes=file.bytes ?? await File(file.path!).readAsBytes();
