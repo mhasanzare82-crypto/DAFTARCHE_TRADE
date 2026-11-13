@@ -18,6 +18,10 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'models/note.dart';
+import 'data/notebook_repository.dart';
+import 'screens/theme_dialogs.dart';
+import 'screens/drawing_page.dart';
 
 const String _quillNoteMarker = '__quill_note_v1__';
 const String _legacyRichNoteMarker = '__rich_note_v1__';
@@ -76,34 +80,11 @@ class NotebookApp extends StatelessWidget {
   );
 }
 
-class Note {
-  final String id, title, body;
-  final DateTime updated;
-  final List<String> images;
-  final List<String> audios;
-  final int themeColor, themeTextColor;
-  final String themeFontFamily;
-  final String? folderId;
-  const Note(this.id, this.title, this.body, this.updated, [this.images = const [], this.themeColor = 0xFFEDE7F6, this.themeTextColor = 0xFF24212A, this.themeFontFamily = 'sans-serif', this.folderId, this.audios = const []]);
-  Map<String, dynamic> toJson() => {'id':id,'title':title,'body':body,'updated':updated.toIso8601String(),'images':images,'themeColor':themeColor,'themeTextColor':themeTextColor,'themeFontFamily':themeFontFamily,'folderId':folderId,'audios':audios};
-  factory Note.fromJson(Map<String,dynamic> j) => Note(j['id'],j['title'],j['body'],DateTime.parse(j['updated']),List<String>.from(j['images'] ?? const []),j['themeColor'] ?? 0xFFEDE7F6,j['themeTextColor'] ?? 0xFF24212A,j['themeFontFamily'] ?? 'sans-serif',j['folderId'] as String?,List<String>.from(j['audios'] ?? const []));
-}
 
-class NoteFolder {
-  final String id,name;
-  const NoteFolder(this.id,this.name);
-  Map<String,dynamic> toJson()=>{'id':id,'name':name};
-  factory NoteFolder.fromJson(Map<String,dynamic> j)=>NoteFolder(j['id'] as String,j['name'] as String);
-}
 
-class NoteTheme {
-  final String name;
-  final int backgroundColor, textColor;
-  final String fontFamily;
-  const NoteTheme(this.name,this.backgroundColor,[this.textColor=0xFF24212A,this.fontFamily='sans-serif']);
-  Map<String,dynamic> toJson()=>{'name':name,'backgroundColor':backgroundColor,'textColor':textColor,'fontFamily':fontFamily};
-  factory NoteTheme.fromJson(Map<String,dynamic> j)=>NoteTheme(j['name'] as String,j['backgroundColor'] ?? j['color'] as int,j['textColor'] ?? 0xFF24212A,j['fontFamily'] ?? 'sans-serif');
-}
+
+
+
 
 class NotesPage extends StatefulWidget {
   const NotesPage({super.key});
@@ -111,10 +92,13 @@ class NotesPage extends StatefulWidget {
   State<NotesPage> createState() => _NotesPageState();
 }
 class _NotesPageState extends State<NotesPage> {
+  final NotebookRepository repository = NotebookRepository();
   final notes=<Note>[];
   final themes=<NoteTheme>[];
   final folders=<NoteFolder>[];
   final search=TextEditingController();
+  final AudioPlayer noteAudioPlayer = AudioPlayer();
+  String? currentlyPlayingAudio;
   String? selectedFolderId;
   bool loading=true;
   final customFonts=<String, String>{};
@@ -123,24 +107,38 @@ class _NotesPageState extends State<NotesPage> {
   @override
   void initState(){super.initState();search.addListener(()=>setState((){}));load();}
   Future<void> load() async {
-    final p=await SharedPreferences.getInstance();
-    try { notes.addAll((jsonDecode(p.getString('notebook_notes')??'[]') as List).map((e)=>Note.fromJson(e))); } catch(_){}
-    try { themes.addAll((jsonDecode(p.getString('notebook_themes')??'[]') as List).map((e)=>NoteTheme.fromJson(e))); } catch(_){}
-    try { folders.addAll((jsonDecode(p.getString('notebook_folders')??'[]') as List).map((e)=>NoteFolder.fromJson(e))); } catch(_){}
-    try { customFonts.addAll(Map<String,String>.from(jsonDecode(p.getString('notebook_custom_fonts')??'{}'))); } catch(_){}
-    for(final entry in customFonts.entries){try{final file=File(entry.value);if(await file.exists()){final bytes=await file.readAsBytes();final loader=FontLoader(entry.key)..addFont(Future.value(ByteData.sublistView(bytes)));await loader.load();}}catch(_){}}
-    if(themes.isEmpty) themes.addAll(defaultThemes);
-    if(mounted)setState(()=>loading=false);
-    await persistThemes();
+    try {
+      final loadedNotes = await repository.loadNotes();
+      final loadedThemes = await repository.loadThemes();
+      final loadedFolders = await repository.loadFolders();
+      final loadedFonts = await repository.loadCustomFonts();
+      notes.addAll(loadedNotes);
+      themes.addAll(loadedThemes);
+      folders.addAll(loadedFolders);
+      customFonts.addAll(loadedFonts);
+      for (final entry in customFonts.entries) {
+        try {
+          final file = File(entry.value);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            final loader = FontLoader(entry.key)..addFont(Future.value(ByteData.sublistView(bytes)));
+            await loader.load();
+          }
+        } catch (_) { /* An unavailable custom font must not block opening the notebook. */ }
+      }
+      if (themes.isEmpty) themes.addAll(defaultThemes);
+      if (mounted) setState(() => loading = false);
+      await persistThemes();
+    } catch (error, stackTrace) {
+      debugPrint('Notebook load failed: $error\\n$stackTrace');
+      if (mounted) setState(() => loading = false);
+    }
   }
-  Future<void> persist() async {
-    final p=await SharedPreferences.getInstance();
-    await p.setString('notebook_notes',jsonEncode(notes.map((n)=>n.toJson()).toList()));
-  }
-  Future<void> persistFolders() async {
-    final p=await SharedPreferences.getInstance();
-    await p.setString('notebook_folders',jsonEncode(folders.map((f)=>f.toJson()).toList()));
-  }
+
+  Future<void> persist() => repository.saveNotes(notes);
+  Future<void> persistFolders() => repository.saveFolders(folders);
+  Future<void> persistThemes() => repository.saveThemes(themes);
+
   Future<void> createFolder() async {
     final controller=TextEditingController();
     final name=await showDialog<String>(context:context,builder:(c)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
@@ -166,22 +164,34 @@ class _NotesPageState extends State<NotesPage> {
     setState((){final i=notes.indexWhere((n)=>n.id==note.id);if(i>=0){final n=notes[i];notes[i]=Note(n.id,n.title,n.body,n.updated,List.of(n.images),n.themeColor,n.themeTextColor,n.themeFontFamily,id,List.of(n.audios));}});
     await persist();
   }
-  Future<void> persistThemes() async {
-    final p=await SharedPreferences.getInstance();
-    await p.setString('notebook_themes',jsonEncode(themes.map((t)=>t.toJson()).toList()));
-  }
   Future<void> manageThemes() async {
-    final result=await showDialog<List<NoteTheme>>(context:context,builder:(context)=>ThemeManagerDialog(initialThemes:List.of(themes),customFonts:customFonts.keys.toList()));
+    final result=await showDialog<List<NoteTheme>>(context:context,builder:(context)=>ThemeManagerDialog(
+      initialThemes:List.of(themes),
+      customFonts:customFonts.keys.toList(),
+      onAddCustomFont:() async {
+        await addCustomFont();
+        return customFonts.keys.toList();
+      },
+    ));
     if(result!=null){
       setState((){themes..clear()..addAll(result);});
       await persistThemes();
     }
   }
   Future<void> addCustomFont() async {
-    final picked=await FilePicker.pickFiles(type:FileType.custom,allowedExtensions:['ttf','otf'],withData:true);
-    if(picked==null||picked.files.isEmpty)return;
-    final file=picked.files.first;
-    final bytes=file.bytes ?? await File(file.path!).readAsBytes();
+    final picked=await FilePicker.pickFiles(type:FileType.custom,allowedExtensions:['ttf','otf']);
+    if(picked.isEmpty)return;
+    final file=picked.first;
+    final filePath = file.path;
+    if (filePath == null || filePath.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('مسیر فایل فونت قابل دسترسی نیست.')),
+        );
+      }
+      return;
+    }
+    final bytes = await File(filePath).readAsBytes();
     final parts=file.name.split('.');
     final original=parts.length>1?parts.sublist(0,parts.length-1).join('.'):file.name;
     final family='custom_'+original.replaceAll(RegExp(r'[^A-Za-z0-9_]+'),'_')+'_'+DateTime.now().millisecondsSinceEpoch.toString();
@@ -199,8 +209,7 @@ class _NotesPageState extends State<NotesPage> {
       return;
     }
     customFonts[family]=saved.path;
-    final prefs=await SharedPreferences.getInstance();
-    await prefs.setString('notebook_custom_fonts',jsonEncode(customFonts));
+    await repository.saveCustomFonts(customFonts);
     if(mounted){setState((){});ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('فونت «'+original+'» اضافه شد. اکنون نام آن را در بخش فونت تم انتخاب کن.')));}
   }
   List<Note> get filtered {
@@ -556,6 +565,31 @@ class _NotesPageState extends State<NotesPage> {
     }
   }
 
+  Future<void> playNoteAudio(String path) async {
+    final file = File(path);
+    if (!await file.exists()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('فایل ویس پیدا نشد.')),
+        );
+      }
+      return;
+    }
+    try {
+      await noteAudioPlayer.stop();
+      if (!mounted) return;
+      setState(() => currentlyPlayingAudio = path);
+      await noteAudioPlayer.play(DeviceFileSource(path));
+    } catch (error) {
+      if (mounted) {
+        setState(() => currentlyPlayingAudio = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('پخش ویس ناموفق بود: $error')),
+        );
+      }
+    }
+  }
+
   void showNoteMenu(Note note) {
     showModalBottomSheet<void>(context: context, builder: (sheetContext) =>
       Directionality(textDirection: TextDirection.rtl, child: SafeArea(child: Wrap(children: [
@@ -576,7 +610,7 @@ class _NotesPageState extends State<NotesPage> {
 
   String date(DateTime d)=>d.year.toString()+'/'+d.month.toString().padLeft(2,'0')+'/'+d.day.toString().padLeft(2,'0');
   @override
-  void dispose(){search.dispose();super.dispose();}
+  void dispose(){search.dispose();noteAudioPlayer.dispose();super.dispose();}
   @override
   Widget build(BuildContext context){
     final items=filtered;
@@ -605,6 +639,28 @@ class _NotesPageState extends State<NotesPage> {
               Row(children:[Expanded(child:Text(n.title.isEmpty?'بدون عنوان':n.title,style:TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily))),IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))]),
               if(_notePlainText(n.body).isNotEmpty)Text(_notePlainText(n.body),maxLines:3,overflow:TextOverflow.ellipsis,style:TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),
               if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Color(n.themeTextColor).withOpacity(.7),fontSize:12,fontFamily:n.themeFontFamily))),
+              if(n.audios.isNotEmpty)Padding(
+                padding:const EdgeInsets.only(top:8),
+                child:Wrap(
+                  spacing:6,
+                  runSpacing:4,
+                  children:[
+                    for(var audioIndex=0;audioIndex<n.audios.length;audioIndex++)
+                      ActionChip(
+                        avatar:Icon(
+                          currentlyPlayingAudio==n.audios[audioIndex]
+                              ? Icons.volume_up_rounded
+                              : Icons.play_arrow_rounded,
+                          size:18,
+                          color:Color(n.themeTextColor),
+                        ),
+                        label:Text('پخش ویس ${audioIndex+1}',style:TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),
+                        onPressed:()=>playNoteAudio(n.audios[audioIndex]),
+                        backgroundColor:Color(n.themeColor).withOpacity(.75),
+                      ),
+                  ],
+                ),
+              ),
               const SizedBox(height:8),Text(date(n.updated),style:TextStyle(fontSize:11,color:Color(n.themeTextColor).withOpacity(.65),fontFamily:n.themeFontFamily)),
             ]))));
           })),
@@ -761,6 +817,31 @@ class _EditorPageState extends State<EditorPage> {
     textDirection: TextDirection.rtl,
     child: Scaffold(
       appBar: AppBar(title: const Text('یادداشت'), actions: [
+        PopupMenuButton<String>(
+          tooltip: 'ابزارهای بیشتر',
+          onSelected: (value) {
+            if (value == 'font_size') setNumericFontSize();
+            if (value == 'voice') toggleRecording();
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'font_size',
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.format_size),
+                title: Text('اندازه عددی متن'),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'voice',
+              child: ListTile(
+                dense: true,
+                leading: Icon(isRecording ? Icons.stop_circle_outlined : Icons.mic_none),
+                title: Text(isRecording ? 'پایان ضبط ویس' : 'افزودن ویس'),
+              ),
+            ),
+          ],
+        ),
         TextButton.icon(onPressed: save, icon: const Icon(Icons.check), label: const Text('ذخیره')),
       ]),
       backgroundColor: Color(themeColor),
@@ -773,10 +854,6 @@ class _EditorPageState extends State<EditorPage> {
             decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
           ),
           const SizedBox(height: 8),
-          Align(alignment:Alignment.centerRight,child:Wrap(spacing:8,runSpacing:4,children:[
-            OutlinedButton.icon(onPressed:setNumericFontSize,icon:const Icon(Icons.format_size),label:const Text('اندازه عددی متن')),
-            OutlinedButton.icon(onPressed:toggleRecording,icon:Icon(isRecording?Icons.stop_circle_outlined:Icons.mic_none),label:Text(isRecording?'پایان ضبط':'ضبط ویس')),
-          ])),
           if(audioPaths.isNotEmpty) SizedBox(height:54,child:ListView(scrollDirection:Axis.horizontal,children:[for(var i=0;i<audioPaths.length;i++)Padding(padding:const EdgeInsets.only(left:8),child:Chip(avatar:IconButton(icon:const Icon(Icons.play_arrow,size:18),onPressed:()=>playAudio(audioPaths[i])),label:Text('ویس ${i+1}'),onDeleted:()=>setState(()=>audioPaths.removeAt(i))))])),
           quill.QuillSimpleToolbar(
             controller: controller,
@@ -829,143 +906,7 @@ class _EditorPageState extends State<EditorPage> {
   );
 }
 
-class ThemeManagerDialog extends StatefulWidget {
-  final List<NoteTheme> initialThemes;
-  const ThemeManagerDialog({super.key, required this.initialThemes});
-  @override
-  State<ThemeManagerDialog> createState() => _ThemeManagerDialogState();
-}
-class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
-  late List<NoteTheme> items;
-  @override
-  void initState() { super.initState(); items = List.of(widget.initialThemes); }
-  Future<void> editTheme([NoteTheme? old]) async {
-    final result = await showDialog<NoteTheme>(context: context, builder: (_) => ThemeEditorDialog(theme: old));
-    if (result == null) return;
-    setState(() {
-      if (old == null) { items.add(result); }
-      else { final index = items.indexOf(old); if (index >= 0) items[index] = result; }
-    });
-  }
-  Future<void> deleteTheme(NoteTheme theme) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('حذف تم؟'),
-        content: Text('تم «${theme.name}» حذف شود؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف')),
-        ],
-      ),
-    );
-    if (confirmed == true) setState(() => items.remove(theme));
-  }
-  @override
-  Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: AlertDialog(
-        title: const Text('مدیریت تم‌ها'),
-        content: SizedBox(
-          width: 420,
-          child: items.isEmpty
-              ? const Text('هنوز تمی نساخته‌ای.')
-              : ListView(
-                  shrinkWrap: true,
-                  children: items.map((theme) => Card(
-                    color: Color(theme.backgroundColor),
-                    child: ListTile(
-                      title: Text(theme.name, style: TextStyle(color: Color(theme.textColor), fontFamily: theme.fontFamily)),
-                      subtitle: Text('پس‌زمینه، رنگ متن و فونت', style: TextStyle(color: Color(theme.textColor).withOpacity(.75))),
-                      leading: CircleAvatar(backgroundColor: Color(theme.backgroundColor), child: Icon(Icons.text_fields, color: Color(theme.textColor))),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(tooltip: 'ویرایش', onPressed: () => editTheme(theme), icon: const Icon(Icons.edit_outlined)),
-                        IconButton(tooltip: 'حذف', onPressed: () => deleteTheme(theme), icon: const Icon(Icons.delete_outline)),
-                      ]),
-                      onTap: () => editTheme(theme),
-                    ),
-                  )).toList(),
-                ),
-        ),
-        actions: [
-          TextButton.icon(onPressed: () => editTheme(), icon: const Icon(Icons.add), label: const Text('ساخت تم')),
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-          FilledButton(onPressed: () => Navigator.pop(context, items), child: const Text('ذخیره')),
-        ],
-      ),
-    );
-  }
-}
 
-class ThemeEditorDialog extends StatefulWidget{
-  final NoteTheme? theme;
-  const ThemeEditorDialog({super.key,this.theme});
-  @override
-  State<ThemeEditorDialog> createState()=>_ThemeEditorDialogState();
-}
-class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
-  late final TextEditingController name,font;
-  late int background,textColor;
-  static const backgrounds=[
-    0xFFFFEBEE,0xFFFCE4EC,0xFFF3E5F5,0xFFEDE7F6,0xFFE8EAF6,
-    0xFFE3F2FD,0xFFE1F5FE,0xFFE0F7FA,0xFFE0F2F1,0xFFE8F5E9,
-    0xFFF1F8E9,0xFFF9FBE7,0xFFFFFDE7,0xFFFFF8E1,0xFFFFF3E0,
-    0xFFFFEAD5,0xFFFBE9E7,0xFFEFEBE9,0xFFECEFF1,0xFFE0E0E0,
-    0xFFCFD8DC,0xFFB3E5FC,0xFFB2DFDB,0xFFC8E6C9,0xFFDCEDC8,
-    0xFFFFF9C4,0xFFFFE0B2,0xFFFFCCBC,0xFFD7CCC8,0xFFD1C4E9,
-  ];
-  static const textColors=[
-    0xFF16131C,0xFF000000,0xFF263238,0xFF37474F,0xFF1A237E,
-    0xFF0D47A1,0xFF006064,0xFF004D40,0xFF1B5E20,0xFF33691E,
-    0xFF827717,0xFF5D4037,0xFF4E342E,0xFF6D4C41,0xFF880E4F,
-    0xFFAD1457,0xFF6A1B9A,0xFF4527A0,0xFFB71C1C,0xFFFFFFFF,
-  ];
-  static const commonFonts=['sans-serif','serif','monospace','sans-serif-condensed','sans-serif-light','sans-serif-medium','cursive'];
-  @override
-  void initState(){
-    super.initState();
-    final t=widget.theme;
-    name=TextEditingController(text:t?.name??'');
-    font=TextEditingController(text:t?.fontFamily??'sans-serif');
-    background=t?.backgroundColor??backgrounds[3];
-    textColor=t?.textColor??textColors.first;
-  }
-  @override
-  void dispose(){name.dispose();font.dispose();super.dispose();}
-  @override
-  Widget build(BuildContext context)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
-    title:Text(widget.theme==null?'ساخت تم جدید':'ویرایش تم'),
-    content:SingleChildScrollView(child:SizedBox(width:420,child:Column(
-      mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
-        TextField(controller:name,maxLength:24,decoration:const InputDecoration(labelText:'نام دلخواه تم',hintText:'مثلاً شب آرام')),
-        const SizedBox(height:12),const Text('۱. رنگ پس‌زمینه (۳۰ رنگ)'),
-        const SizedBox(height:8),
-        Wrap(spacing:9,runSpacing:9,children:backgrounds.map((c)=>GestureDetector(
-          onTap:()=>setState(()=>background=c),
-          child:Container(width:32,height:32,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:background==c?Colors.deepPurple:Colors.black26,width:background==c?3:1))),
-        )).toList()),
-        const SizedBox(height:16),const Text('۲. رنگ متن'),
-        const SizedBox(height:8),
-        Wrap(spacing:9,runSpacing:9,children:textColors.map((c)=>GestureDetector(
-          onTap:()=>setState(()=>textColor=c),
-          child:Container(width:30,height:30,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:textColor==c?Colors.deepPurple:Colors.black26,width:textColor==c?3:1))),
-        )).toList()),
-        const SizedBox(height:16),const Text('۳. فونت دلخواه'),
-        TextField(controller:font,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'نام فونت دستگاه یا فونت برنامه',hintText:'مثلاً sans-serif')),
-        const Text('برای نمایش دقیق، فونت باید روی دستگاه موجود یا به برنامه اضافه شده باشد.',style:TextStyle(fontSize:11,color:Colors.black54)),
-        const SizedBox(height:6),
-        Wrap(spacing:6,children:commonFonts.map((f)=>ActionChip(label:Text(f,style:TextStyle(fontFamily:f,fontSize:11)),onPressed:()=>setState(()=>font.text=f))).toList()),
-        const SizedBox(height:16),const Text('پیش‌نمایش'),
-        Container(width:double.infinity,padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:Color(background),borderRadius:BorderRadius.circular(12)),child:Text('یادداشت نمونه؛ این متن با فونت و رنگ انتخابی نمایش داده می‌شود.',style:TextStyle(color:Color(textColor),fontFamily:font.text.trim().isEmpty?'sans-serif':font.text.trim(),fontSize:16))),
-      ],
-    ))),
-    actions:[
-      TextButton(onPressed:()=>Navigator.pop(context),child:const Text('انصراف')),
-      FilledButton(onPressed:()=>Navigator.pop(context,NoteTheme(name.text.trim().isEmpty?'تم بدون نام':name.text.trim(),background,textColor,font.text.trim().isEmpty?'sans-serif':font.text.trim())),child:const Text('ذخیره تم')),
-    ],
-  ));
-}
 
 class Stroke{final List<Offset> points;final Color color;final double width;const Stroke(this.points,this.color,this.width);}
 class DrawingPage extends StatefulWidget{
