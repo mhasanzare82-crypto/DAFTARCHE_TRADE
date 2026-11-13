@@ -474,12 +474,11 @@ class _NotesPageState extends State<NotesPage> {
       final files = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['docx'],
-        withData: true,
       );
-      if (files == null || files.files.isEmpty) return;
+      if (files.isEmpty) return;
       final imported = <Note>[];
       final failures = <String>[];
-      for (final file in files.files) {
+      for (final file in files) {
         try {
           final note = await _noteFromDocx(file);
           if (note != null) {
