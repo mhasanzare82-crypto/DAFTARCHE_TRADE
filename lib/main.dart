@@ -218,6 +218,42 @@ class _NotesPageState extends State<NotesPage> {
     final list=notes.where((n)=>(selectedFolderId==null||n.folderId==selectedFolderId)&&(n.title.toLowerCase().contains(q)||_notePlainText(n.body).toLowerCase().contains(q))).toList();
     list.sort((a,b)=>b.updated.compareTo(a.updated));return list;
   }
+
+  // During a search, show the exact original line(s) containing the query.
+  String _searchPreviewLines(String source, String query) {
+    final q = query.trim();
+    if (q.isEmpty) return source;
+    final matchingLines = source
+        .split('\n')
+        .where((line) => line.toLowerCase().contains(q.toLowerCase()))
+        .take(3)
+        .toList();
+    return matchingLines.isEmpty ? source : matchingLines.join('\n');
+  }
+
+  TextSpan _highlightSearchText(String value, String query, TextStyle baseStyle) {
+    final q = query.trim();
+    if (q.isEmpty) return TextSpan(text: value, style: baseStyle);
+    final expression = RegExp(RegExp.escape(q), caseSensitive: false);
+    final spans = <TextSpan>[];
+    var cursor = 0;
+    for (final match in expression.allMatches(value)) {
+      if (match.start > cursor) {
+        spans.add(TextSpan(text: value.substring(cursor, match.start)));
+      }
+      spans.add(TextSpan(
+        text: value.substring(match.start, match.end),
+        style: baseStyle.copyWith(
+          color: const Color(0xFF5B3FA3),
+          fontWeight: FontWeight.bold,
+          backgroundColor: const Color(0xFFE6DDF8),
+        ),
+      ));
+      cursor = match.end;
+    }
+    if (cursor < value.length) spans.add(TextSpan(text: value.substring(cursor)));
+    return TextSpan(style: baseStyle, children: spans);
+  }
   Future<void> edit([Note? note]) async {
     final selected=note==null?(themes.isEmpty?defaultThemes.first:themes[Random().nextInt(themes.length)]):NoteTheme('فعلی',note.themeColor,note.themeTextColor,note.themeFontFamily);
     final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,initialFolderId:note?.folderId??selectedFolderId)));
@@ -689,8 +725,16 @@ class _NotesPageState extends State<NotesPage> {
           :ListView.separated(padding:const EdgeInsets.fromLTRB(20,0,20,100),itemCount:items.length,separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(_,i){
             final n=items[i];
             return Card(elevation:0,color:Color(n.themeColor),child:InkWell(onTap:()=>edit(n),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Row(children:[Expanded(child:Text(n.title.isEmpty?'بدون عنوان':n.title,style:TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily))),IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))]),
-              if(_notePlainText(n.body).isNotEmpty)Text(_notePlainText(n.body),maxLines:3,overflow:TextOverflow.ellipsis,style:TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),
+              Row(children:[Expanded(child:RichText(text:_highlightSearchText(n.title.isEmpty?'بدون عنوان':n.title,search.text,TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),maxLines:1,overflow:TextOverflow.ellipsis)),IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))]),
+              if(_notePlainText(n.body).isNotEmpty)RichText(
+                text:_highlightSearchText(
+                  _searchPreviewLines(_notePlainText(n.body),search.text),
+                  search.text,
+                  TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily),
+                ),
+                maxLines:3,
+                overflow:TextOverflow.ellipsis,
+              ),
               if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Color(n.themeTextColor).withOpacity(.7),fontSize:12,fontFamily:n.themeFontFamily))),
               if(n.audios.isNotEmpty)Padding(
                 padding:const EdgeInsets.only(top:8),
