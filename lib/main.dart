@@ -363,7 +363,7 @@ class _NotesPageState extends State<NotesPage> {
         documentsDirectory: documentsDirectory,
       );
       final imported = <Note>[];
-      final failures = <String>[];
+      final failures = <String, String>{};
 
       for (final file in files) {
         try {
@@ -374,7 +374,7 @@ class _NotesPageState extends State<NotesPage> {
           imported.add(note);
         } catch (error, stackTrace) {
           debugPrint('DOCX import failed for ' + file.name + ': ' + error.toString() + '\n' + stackTrace.toString());
-          failures.add(file.name);
+          failures[file.name] = error.toString();
         }
       }
 
@@ -394,10 +394,11 @@ class _NotesPageState extends State<NotesPage> {
       final message = failures.isEmpty
           ? imported.length.toString() + ' فایل Word با موفقیت وارد شد'
           : imported.isEmpty
-              ? 'واردکردن فایل‌ها ناموفق بود: ' + failures.take(2).join('، ')
+              ? 'واردکردن فایل‌ها ناموفق بود: ' + failures.keys.take(2).join('، ') +
+                  '\\nعلت: ' + failures.values.first
               : imported.length.toString() + ' فایل وارد شد؛ ' +
                   failures.length.toString() + ' فایل ناموفق بود: ' +
-                  failures.take(2).join('، ');
+                  failures.keys.take(2).join('، ') + '\\nعلت: ' + failures.values.first;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
