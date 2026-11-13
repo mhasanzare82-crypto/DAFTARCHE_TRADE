@@ -768,6 +768,31 @@ class _EditorPageState extends State<EditorPage> {
     textDirection: TextDirection.rtl,
     child: Scaffold(
       appBar: AppBar(title: const Text('یادداشت'), actions: [
+        PopupMenuButton<String>(
+          tooltip: 'ابزارهای بیشتر',
+          onSelected: (value) {
+            if (value == 'font_size') setNumericFontSize();
+            if (value == 'voice') toggleRecording();
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'font_size',
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.format_size),
+                title: Text('اندازه عددی متن'),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'voice',
+              child: ListTile(
+                dense: true,
+                leading: Icon(isRecording ? Icons.stop_circle_outlined : Icons.mic_none),
+                title: Text(isRecording ? 'پایان ضبط ویس' : 'افزودن ویس'),
+              ),
+            ),
+          ],
+        ),
         TextButton.icon(onPressed: save, icon: const Icon(Icons.check), label: const Text('ذخیره')),
       ]),
       backgroundColor: Color(themeColor),
@@ -780,10 +805,6 @@ class _EditorPageState extends State<EditorPage> {
             decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
           ),
           const SizedBox(height: 8),
-          Align(alignment:Alignment.centerRight,child:Wrap(spacing:8,runSpacing:4,children:[
-            OutlinedButton.icon(onPressed:setNumericFontSize,icon:const Icon(Icons.format_size),label:const Text('اندازه عددی متن')),
-            OutlinedButton.icon(onPressed:toggleRecording,icon:Icon(isRecording?Icons.stop_circle_outlined:Icons.mic_none),label:Text(isRecording?'پایان ضبط':'ضبط ویس')),
-          ])),
           if(audioPaths.isNotEmpty) SizedBox(height:54,child:ListView(scrollDirection:Axis.horizontal,children:[for(var i=0;i<audioPaths.length;i++)Padding(padding:const EdgeInsets.only(left:8),child:Chip(avatar:IconButton(icon:const Icon(Icons.play_arrow,size:18),onPressed:()=>playAudio(audioPaths[i])),label:Text('ویس ${i+1}'),onDeleted:()=>setState(()=>audioPaths.removeAt(i))))])),
           quill.QuillSimpleToolbar(
             controller: controller,
