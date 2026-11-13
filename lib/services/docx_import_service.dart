@@ -21,7 +21,7 @@ class DocxImportService {
     if (documentFile == null) {
       throw const FormatException('ساختار DOCX معتبر نیست؛ document.xml پیدا نشد.');
     }
-    final document = XmlDocument.parse(utf8.decode(documentFile.readBytes(), allowMalformed: true));
+    final document = XmlDocument.parse(utf8.decode(documentFile.readBytes() ?? Uint8List(0), allowMalformed: true));
     final body = _descendant(document, 'body');
     if (body == null) throw const FormatException('بدنه سند Word پیدا نشد.');
 
@@ -69,7 +69,7 @@ class DocxImportService {
       final path = _resolveTarget(rel.target);
       final entry = archive.findFile(path);
       if (entry == null) return;
-      final data = entry.readBytes();
+      final data = entry.readBytes() ?? Uint8List(0);
       if (data.isEmpty) return;
       final extension = _imageExtension(path, contentTypes);
       final name = 'docx_' +
@@ -235,7 +235,7 @@ class DocxImportService {
     final result = <String, _DocxRelationship>{};
     final file = archive.findFile('word/_rels/document.xml.rels');
     if (file == null) return result;
-    final xml = XmlDocument.parse(utf8.decode(file.readBytes(), allowMalformed: true));
+    final xml = XmlDocument.parse(utf8.decode(file.readBytes() ?? Uint8List(0), allowMalformed: true));
     for (final element in xml.descendants.whereType<XmlElement>()) {
       if (element.name.local != 'Relationship') continue;
       final id = _attr(element, 'Id');
@@ -254,7 +254,7 @@ class DocxImportService {
     final result = <String, String>{};
     final file = archive.findFile('word/numbering.xml');
     if (file == null) return result;
-    final xml = XmlDocument.parse(utf8.decode(file.readBytes(), allowMalformed: true));
+    final xml = XmlDocument.parse(utf8.decode(file.readBytes() ?? Uint8List(0), allowMalformed: true));
     final formats = <String, String>{};
     for (final element in xml.descendants.whereType<XmlElement>()) {
       if (element.name.local != 'abstractNum') continue;
@@ -277,7 +277,7 @@ class DocxImportService {
     final result = <String, String>{};
     final file = archive.findFile('[Content_Types].xml');
     if (file == null) return result;
-    final xml = XmlDocument.parse(utf8.decode(file.readBytes(), allowMalformed: true));
+    final xml = XmlDocument.parse(utf8.decode(file.readBytes() ?? Uint8List(0), allowMalformed: true));
     for (final element in xml.descendants.whereType<XmlElement>()) {
       if (element.name.local != 'Default') continue;
       final extension = _attr(element, 'Extension');
@@ -292,7 +292,7 @@ class DocxImportService {
     if (file == null) return '';
     try {
       return _descendant(
-        XmlDocument.parse(utf8.decode(file.readBytes(), allowMalformed: true)),
+        XmlDocument.parse(utf8.decode(file.readBytes() ?? Uint8List(0), allowMalformed: true)),
         'title',
       )?.innerText.trim() ?? '';
     } catch (_) {
