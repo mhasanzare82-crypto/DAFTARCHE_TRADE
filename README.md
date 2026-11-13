@@ -53,3 +53,12 @@ flutter build apk --release
 
 ---
 ساخته‌شده با Flutter ❤️
+
+
+## Architecture
+
+- `lib/models/`: notebook domain models.
+- `lib/data/`: persistence repository; existing SharedPreferences keys are retained for compatibility.
+- `lib/screens/`: dedicated UI modules for theme dialogs and drawing.
+
+Android release builds are validated through GitHub Actions on pushes to `main` and pull requests targeting `main`.
