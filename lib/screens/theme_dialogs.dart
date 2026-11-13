@@ -3,7 +3,8 @@ import 'models/note.dart';
 
 class ThemeManagerDialog extends StatefulWidget {
   final List<NoteTheme> initialThemes;
-  const ThemeManagerDialog({super.key, required this.initialThemes});
+  final List<String> customFonts;
+  const ThemeManagerDialog({super.key, required this.initialThemes, this.customFonts = const []});
   @override
   State<ThemeManagerDialog> createState() => _ThemeManagerDialogState();
 }
@@ -12,7 +13,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
   @override
   void initState() { super.initState(); items = List.of(widget.initialThemes); }
   Future<void> editTheme([NoteTheme? old]) async {
-    final result = await showDialog<NoteTheme>(context: context, builder: (_) => ThemeEditorDialog(theme: old));
+    final result = await showDialog<NoteTheme>(context: context, builder: (_) => ThemeEditorDialog(theme: old, customFonts: widget.customFonts));
     if (result == null) return;
     setState(() {
       if (old == null) { items.add(result); }
@@ -72,7 +73,8 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
 
 class ThemeEditorDialog extends StatefulWidget{
   final NoteTheme? theme;
-  const ThemeEditorDialog({super.key,this.theme});
+  final List<String> customFonts;
+  const ThemeEditorDialog({super.key,this.theme,this.customFonts=const []});
   @override
   State<ThemeEditorDialog> createState()=>_ThemeEditorDialogState();
 }
@@ -127,7 +129,7 @@ class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
         TextField(controller:font,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'نام فونت دستگاه یا فونت برنامه',hintText:'مثلاً sans-serif')),
         const Text('برای نمایش دقیق، فونت باید روی دستگاه موجود یا به برنامه اضافه شده باشد.',style:TextStyle(fontSize:11,color:Colors.black54)),
         const SizedBox(height:6),
-        Wrap(spacing:6,children:commonFonts.map((f)=>ActionChip(label:Text(f,style:TextStyle(fontFamily:f,fontSize:11)),onPressed:()=>setState(()=>font.text=f))).toList()),
+        Wrap(spacing:6,children:[...commonFonts,...widget.customFonts].map((f)=>ActionChip(label:Text(f,style:TextStyle(fontFamily:f,fontSize:11)),onPressed:()=>setState(()=>font.text=f))).toList()),
         const SizedBox(height:16),const Text('پیش‌نمایش'),
         Container(width:double.infinity,padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:Color(background),borderRadius:BorderRadius.circular(12)),child:Text('یادداشت نمونه؛ این متن با فونت و رنگ انتخابی نمایش داده می‌شود.',style:TextStyle(color:Color(textColor),fontFamily:font.text.trim().isEmpty?'sans-serif':font.text.trim(),fontSize:16))),
       ],
