@@ -750,11 +750,19 @@ class _EditorPageState extends State<EditorPage> {
     final folder = Directory('${dir.path}/notebook_images');
     if (!await folder.exists()) await folder.create(recursive: true);
     final ext = picked.path.contains('.') ? picked.path.substring(picked.path.lastIndexOf('.')) : '.jpg';
-    final path = '${folder.path}/${DateTime.now().microsecondsSinceEpoch}$ext';
-    await File(picked.path).copy(path);
+    final originalPath = '${folder.path}/${DateTime.now().microsecondsSinceEpoch}$ext';
+    await File(picked.path).copy(originalPath);
     if (!mounted) return;
+
+    // Open the drawing canvas immediately after choosing a photo. The user can
+    // save an annotated copy or insert the untouched original.
+    final selectedPath = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => DrawingPage(imagePath: originalPath)),
+    );
+    if (!mounted || selectedPath == null) return;
     final index = controller.selection.extentOffset.clamp(0, controller.document.length - 1);
-    controller.document.insert(index, quill.BlockEmbed.image(path));
+    controller.document.insert(index, quill.BlockEmbed.image(selectedPath));
     controller.document.insert(index + 1, '\n');
     controller.updateSelection(TextSelection.collapsed(offset: index + 2), quill.ChangeSource.local);
   }
@@ -851,6 +859,24 @@ class _EditorPageState extends State<EditorPage> {
           ),
           const SizedBox(height: 8),
           if(audioPaths.isNotEmpty) SizedBox(height:54,child:ListView(scrollDirection:Axis.horizontal,children:[for(var i=0;i<audioPaths.length;i++)Padding(padding:const EdgeInsets.only(left:8),child:Chip(avatar:IconButton(tooltip:currentlyPlayingEditorAudio==audioPaths[i]?'مکث ویس':'پخش ویس',icon:Icon(currentlyPlayingEditorAudio==audioPaths[i]?Icons.pause:Icons.play_arrow,size:18),onPressed:()=>playAudio(audioPaths[i])),label:Text('ویس ${i+1}'),onDeleted:()=>setState(()=>audioPaths.removeAt(i))))])),
+          Expanded(
+            child: quill.QuillEditor.basic(
+              controller: controller,
+              config: quill.QuillEditorConfig(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                placeholder: 'متن یادداشتت را اینجا بنویس...',
+                embedBuilders: FlutterQuillEmbeds.editorBuilders(
+                  imageEmbedConfig: QuillEditorImageEmbedConfig(
+                    imageProviderBuilder: (context, imageUrl) {
+                      final local = File(imageUrl);
+                      return local.existsSync() ? FileImage(local) : null;
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const Divider(height: 1),
           quill.QuillSimpleToolbar(
             controller: controller,
             config: quill.QuillSimpleToolbarConfig(
@@ -865,6 +891,11 @@ class _EditorPageState extends State<EditorPage> {
                   icon: const Icon(Icons.format_size),
                   tooltip: 'اندازه عددی متن',
                   onPressed: setNumericFontSize,
+                ),
+                quill.QuillToolbarCustomButtonOptions(
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  tooltip: 'افزودن عکس و نقاشی روی آن',
+                  onPressed: addImage,
                 ),
                 quill.QuillToolbarCustomButtonOptions(
                   icon: Icon(isRecording ? Icons.stop_circle_outlined : Icons.mic_none),
@@ -889,29 +920,6 @@ class _EditorPageState extends State<EditorPage> {
               showClearFormat: true,
             ),
           ),
-          const Divider(height: 1),
-          Expanded(
-            child: quill.QuillEditor.basic(
-              controller: controller,
-              config: quill.QuillEditorConfig(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                placeholder: 'متن یادداشتت را اینجا بنویس...',
-                embedBuilders: FlutterQuillEmbeds.editorBuilders(
-                  imageEmbedConfig: QuillEditorImageEmbedConfig(
-                    imageProviderBuilder: (context, imageUrl) {
-                      final local = File(imageUrl);
-                      return local.existsSync() ? FileImage(local) : null;
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: double.infinity, child: OutlinedButton.icon(
-            onPressed: addImage,
-            icon: const Icon(Icons.add_photo_alternate_outlined),
-            label: const Text('افزودن عکس از گالری'),
-          )),
         ]),
       ),
     ),
@@ -950,8 +958,9 @@ class _DrawingPageState extends State<DrawingPage>{
   @override
   Widget build(BuildContext context)=>Directionality(textDirection:TextDirection.rtl,child:Scaffold(
     appBar:AppBar(title:const Text('نقاشی روی عکس'),actions:[
-      IconButton(onPressed:strokes.isEmpty?null:()=>setState(()=>strokes.removeLast()),icon:const Icon(Icons.undo)),
-      IconButton(onPressed:()=>setState(()=>strokes.clear()),icon:const Icon(Icons.delete_sweep_outlined)),
+      IconButton(onPressed:strokes.isEmpty?null:()=>setState(()=>strokes.removeLast()),tooltip:'بازگشت یک مرحله',icon:const Icon(Icons.undo)),
+      IconButton(onPressed:()=>setState(()=>strokes.clear()),tooltip:'پاک کردن نقاشی',icon:const Icon(Icons.delete_sweep_outlined)),
+      TextButton(onPressed:()=>Navigator.pop(context,widget.imagePath),child:const Text('بدون نقاشی')),
       TextButton.icon(onPressed:save,icon:const Icon(Icons.check),label:const Text('ذخیره')),
     ]),
     body:Column(children:[
