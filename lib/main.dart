@@ -12,6 +12,7 @@ import 'package:xml/xml.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:dart_quill_delta/dart_quill_delta.dart' as delta;
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -765,7 +766,7 @@ class _EditorPageState extends State<EditorPage> {
     // Fit the inserted image to the available editor width (screen width minus
     // the horizontal padding of the editor page), while preserving its ratio.
     final imageWidth = MediaQuery.sizeOf(context).width - 32;
-    final imageDelta = quill.Delta()
+    final imageDelta = delta.Delta()
       ..retain(index)
       ..insert(
         {'image': selectedPath},
