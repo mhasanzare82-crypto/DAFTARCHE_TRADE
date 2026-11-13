@@ -836,12 +836,12 @@ class _EditorPageState extends State<EditorPage> {
               multiRowsDisplay: false,
               embedButtons: FlutterQuillEmbeds.toolbarButtons(),
               customButtons: [
-                QuillToolbarCustomButtonOptions(
+                quill.QuillToolbarCustomButtonOptions(
                   icon: const Icon(Icons.format_size),
                   tooltip: 'اندازه عددی متن',
                   onPressed: setNumericFontSize,
                 ),
-                QuillToolbarCustomButtonOptions(
+                quill.QuillToolbarCustomButtonOptions(
                   icon: Icon(isRecording ? Icons.stop_circle_outlined : Icons.mic_none),
                   tooltip: isRecording ? 'پایان ضبط ویس' : 'افزودن ویس',
                   onPressed: toggleRecording,
