@@ -871,7 +871,6 @@ class _EditorPageState extends State<EditorPage> {
             decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
           ),
           const SizedBox(height: 8),
-          if(audioPaths.isNotEmpty) SizedBox(height:54,child:ListView(scrollDirection:Axis.horizontal,children:[for(var i=0;i<audioPaths.length;i++)Padding(padding:const EdgeInsets.only(left:8),child:Chip(avatar:IconButton(tooltip:currentlyPlayingEditorAudio==audioPaths[i]?'مکث ویس':'پخش ویس',icon:Icon(currentlyPlayingEditorAudio==audioPaths[i]?Icons.pause:Icons.play_arrow,size:18),onPressed:()=>playAudio(audioPaths[i])),label:Text('ویس ${i+1}'),onDeleted:()=>setState(()=>audioPaths.removeAt(i))))])),
           Expanded(
             child: quill.QuillEditor.basic(
               controller: controller,
@@ -890,6 +889,35 @@ class _EditorPageState extends State<EditorPage> {
             ),
           ),
           const Divider(height: 1),
+          if (audioPaths.isNotEmpty)
+            SizedBox(
+              height: 52,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (var i = 0; i < audioPaths.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: InputChip(
+                        avatar: Icon(
+                          currentlyPlayingEditorAudio == audioPaths[i]
+                              ? Icons.pause_circle_filled
+                              : Icons.play_circle_fill,
+                        ),
+                        label: Text('پخش ویس ${i + 1}'),
+                        onPressed: () => playAudio(audioPaths[i]),
+                        onDeleted: () => setState(() {
+                          if (currentlyPlayingEditorAudio == audioPaths[i]) {
+                            audioPlayer.stop();
+                            currentlyPlayingEditorAudio = null;
+                          }
+                          audioPaths.removeAt(i);
+                        }),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
