@@ -762,9 +762,21 @@ class _EditorPageState extends State<EditorPage> {
     );
     if (!mounted || selectedPath == null) return;
     final index = controller.selection.extentOffset.clamp(0, controller.document.length - 1);
-    controller.document.insert(index, quill.BlockEmbed.image(selectedPath));
-    controller.document.insert(index + 1, '\n');
-    controller.updateSelection(TextSelection.collapsed(offset: index + 2), quill.ChangeSource.local);
+    // Fit the inserted image to the available editor width (screen width minus
+    // the horizontal padding of the editor page), while preserving its ratio.
+    final imageWidth = MediaQuery.sizeOf(context).width - 32;
+    final imageDelta = quill.Delta()
+      ..retain(index)
+      ..insert(
+        {'image': selectedPath},
+        {'style': 'width: ${imageWidth}px;'},
+      )
+      ..insert('\n');
+    controller.document.compose(imageDelta, quill.ChangeSource.local);
+    controller.updateSelection(
+      TextSelection.collapsed(offset: index + 2),
+      quill.ChangeSource.local,
+    );
   }
 
   Future<void> toggleRecording() async {
