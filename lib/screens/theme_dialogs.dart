@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'models/note.dart';
+import '../models/note.dart';
 
 class ThemeManagerDialog extends StatefulWidget {
   final List<NoteTheme> initialThemes;
