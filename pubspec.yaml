@@ -18,6 +18,8 @@ dependencies:
   xml: ^6.6.1
   flutter_quill: ^11.4.2
   flutter_quill_extensions: ^11.0.0
+  record: ^6.1.2
+  audioplayers: ^6.5.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
