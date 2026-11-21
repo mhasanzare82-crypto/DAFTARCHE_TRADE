@@ -107,7 +107,7 @@ class NotebookApp extends StatefulWidget {
 }
 
 class _NotebookAppState extends State<NotebookApp> {
-  String appFontFamily = 'system-default';
+  String appFontFamily = 'Estedad';
   String appThemeName = 'دودی';
   final NotebookRepository repository = NotebookRepository();
 
@@ -121,8 +121,8 @@ class _NotebookAppState extends State<NotebookApp> {
   Future<void> _loadAppFont() async {
     final saved = await repository.loadAppFont();
     if (!mounted) return;
-    final legacyDefaults = {'sans-serif', 'serif', 'monospace', 'sans-serif-condensed', 'sans-serif-light', 'sans-serif-medium', 'cursive'};
-    final selected = saved == null || saved.isEmpty || legacyDefaults.contains(saved) ? 'system-default' : saved;
+    // The application interface now uses Estedad exclusively.
+    const selected = 'Estedad';
     setState(() => appFontFamily = selected);
     if (saved != selected) await repository.saveAppFont(selected);
   }
@@ -139,7 +139,7 @@ class _NotebookAppState extends State<NotebookApp> {
   }
 
   Future<void> _setAppFont(String family) async {
-    final normalized = family.trim().isEmpty ? 'system-default' : family.trim();
+    const normalized = 'Estedad';
     setState(() => appFontFamily = normalized);
     await repository.saveAppFont(normalized);
   }
@@ -172,7 +172,7 @@ class NotesPage extends StatefulWidget {
   final String appThemeName;
   final Future<void> Function(String) onAppFontChanged;
   final Future<void> Function(String) onAppThemeChanged;
-  const NotesPage({super.key, this.appFontFamily = 'system-default', this.appThemeName = 'دودی', this.onAppFontChanged = _ignoreAppFontChange, this.onAppThemeChanged = _ignoreAppFontChange});
+  const NotesPage({super.key, this.appFontFamily = 'Estedad', this.appThemeName = 'دودی', this.onAppFontChanged = _ignoreAppFontChange, this.onAppThemeChanged = _ignoreAppFontChange});
   @override
   State<NotesPage> createState() => _NotesPageState();
 }
@@ -267,10 +267,6 @@ class _NotesPageState extends State<NotesPage> {
         appThemeName: widget.appThemeName,
         initialRandomThemeNames: randomThemeNames.toList(),
         initialTextColorPalette: List<int>.of(textColorPalette),
-        onAddCustomFont: () async {
-          await addCustomFont();
-          return customFonts.keys.toList();
-        },
       ),
     );
     if (result == null) return;
