@@ -77,7 +77,7 @@ class NotebookApp extends StatefulWidget {
 }
 
 class _NotebookAppState extends State<NotebookApp> {
-  String appFontFamily = 'Estedad';
+  String appFontFamily = 'system-default';
   final NotebookRepository repository = NotebookRepository();
 
   @override
@@ -90,13 +90,13 @@ class _NotebookAppState extends State<NotebookApp> {
     final saved = await repository.loadAppFont();
     if (!mounted) return;
     final legacyDefaults = {'sans-serif', 'serif', 'monospace', 'sans-serif-condensed', 'sans-serif-light', 'sans-serif-medium', 'cursive'};
-    final selected = saved == null || saved.isEmpty || legacyDefaults.contains(saved) ? 'Estedad' : saved;
+    final selected = saved == null || saved.isEmpty || legacyDefaults.contains(saved) ? 'system-default' : saved;
     setState(() => appFontFamily = selected);
     if (saved != selected) await repository.saveAppFont(selected);
   }
 
   Future<void> _setAppFont(String family) async {
-    final normalized = family.trim().isEmpty ? 'Estedad' : family.trim();
+    final normalized = family.trim().isEmpty ? 'system-default' : family.trim();
     setState(() => appFontFamily = normalized);
     await repository.saveAppFont(normalized);
   }
@@ -107,7 +107,7 @@ class _NotebookAppState extends State<NotebookApp> {
     title: 'دفترچه ترید',
     theme: ThemeData(
       useMaterial3: true,
-      fontFamily: appFontFamily,
+      fontFamily: appFontFamily == 'system-default' ? null : appFontFamily,
       textTheme: appFontFamily == 'Estedad' ? GoogleFonts.getTextTheme('Estedad') : null,
       primaryTextTheme: appFontFamily == 'Estedad' ? GoogleFonts.getTextTheme('Estedad') : null,
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6956A5)),
@@ -132,7 +132,7 @@ Future<void> _ignoreAppFontChange(String _) async {}
 class NotesPage extends StatefulWidget {
   final String appFontFamily;
   final Future<void> Function(String) onAppFontChanged;
-  const NotesPage({super.key, this.appFontFamily = 'Estedad', this.onAppFontChanged = _ignoreAppFontChange});
+  const NotesPage({super.key, this.appFontFamily = 'system-default', this.onAppFontChanged = _ignoreAppFontChange});
   @override
   State<NotesPage> createState() => _NotesPageState();
 }
@@ -515,11 +515,11 @@ class _NotesPageState extends State<NotesPage> {
           final target = rid == null ? null : relationships[rid];
           if (target == null) continue;
           final resolved = Uri.parse('word/document.xml').resolve(target).path;
-          final normalized = resolved.replaceAll('\\', '/').split('/').fold<String>((acc, part) {
+          final normalized = resolved.replaceAll('\\', '/').split('/').fold<String>('', (acc, part) {
             if (part.isEmpty || part == '.') return acc;
             if (part == '..') return acc.contains('/') ? acc.substring(0, acc.lastIndexOf('/')) : '';
             return acc.isEmpty ? part : '$acc/$part';
-          }, '');
+          });
           final mediaFile = zip.findFile(normalized);
           if (mediaFile == null) continue;
           final ext = normalized.contains('.') ? normalized.substring(normalized.lastIndexOf('.')) : '.png';
