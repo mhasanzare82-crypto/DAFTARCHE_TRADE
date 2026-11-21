@@ -38,10 +38,22 @@ jobs:
           flutter doctor -v
 
       - name: Install dependencies
-        run: flutter pub get
+        run: |
+          for attempt in 1 2 3; do
+            flutter pub get && break
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "Dependency resolution failed; retrying in 20 seconds (attempt $attempt/3)."
+            sleep 20
+          done
 
       - name: Build release APK
-        run: flutter build apk --release --verbose
+        run: |
+          for attempt in 1 2 3; do
+            flutter build apk --release --verbose && exit 0
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "Release build failed; retrying in 30 seconds (attempt $attempt/3)."
+            sleep 30
+          done
 
       - name: Verify APK output
         run: |
