@@ -262,7 +262,6 @@ class _NotesPageState extends State<NotesPage> {
       context: context,
       builder: (context) => ThemeManagerDialog(
         initialThemes: List.of(themes),
-        customFonts: customFonts.keys.toList(),
         appFontFamily: widget.appFontFamily,
         appThemeName: widget.appThemeName,
         initialRandomThemeNames: randomThemeNames.toList(),
