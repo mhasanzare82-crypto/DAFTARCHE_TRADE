@@ -69,6 +69,36 @@ String _notePlainText(String body) {
       .trim();
 }
 
+
+ThemeData _buildAppTheme(String preset, String fontFamily) {
+  final isWhite = preset == 'سفید';
+  final isBlack = preset == 'سیاه';
+  final isSilver = preset == 'نقره‌ای';
+  final background = isWhite ? const Color(0xFFF9FAFB) : isBlack ? const Color(0xFF101114) : isSilver ? const Color(0xFFE1E4E8) : const Color(0xFF292D32);
+  final surface = isWhite ? Colors.white : isBlack ? const Color(0xFF1A1C20) : isSilver ? const Color(0xFFF0F2F5) : const Color(0xFF363B41);
+  final foreground = (isBlack || preset == 'دودی') ? const Color(0xFFF0F1F3) : const Color(0xFF202327);
+  final primary = isWhite ? const Color(0xFF41464D) : isBlack ? const Color(0xFFB8BEC7) : isSilver ? const Color(0xFF68717C) : const Color(0xFFB7BEC7);
+  final appBarBackground = isWhite ? const Color(0xFFF1F3F5) : isBlack ? const Color(0xFF08090B) : isSilver ? const Color(0xFFC8CDD4) : const Color(0xFF171A1E);
+  final dark = isBlack || preset == 'دودی';
+  final base = ThemeData(
+    useMaterial3: true,
+    fontFamily: fontFamily == 'system-default' ? null : fontFamily,
+    textTheme: fontFamily == 'Estedad' ? GoogleFonts.getTextTheme('Estedad') : null,
+    primaryTextTheme: fontFamily == 'Estedad' ? GoogleFonts.getTextTheme('Estedad') : null,
+    colorScheme: ColorScheme.fromSeed(seedColor: primary, brightness: dark ? Brightness.dark : Brightness.light).copyWith(
+      primary: primary,
+      onPrimary: dark ? const Color(0xFF17191C) : Colors.white,
+      secondary: isSilver ? const Color(0xFF929BA6) : const Color(0xFF9DA3AA),
+      onSecondary: const Color(0xFF202327),
+      surface: surface,
+    ),
+    scaffoldBackgroundColor: background,
+    appBarTheme: AppBarTheme(backgroundColor: appBarBackground, foregroundColor: foreground, elevation: 0, iconTheme: IconThemeData(color: foreground)),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(backgroundColor: primary, foregroundColor: dark ? const Color(0xFF17191C) : Colors.white, elevation: 5),
+  );
+  return base;
+}
+
 void main() => runApp(const NotebookApp());
 class NotebookApp extends StatefulWidget {
   const NotebookApp({super.key});
@@ -78,12 +108,14 @@ class NotebookApp extends StatefulWidget {
 
 class _NotebookAppState extends State<NotebookApp> {
   String appFontFamily = 'system-default';
+  String appThemeName = 'دودی';
   final NotebookRepository repository = NotebookRepository();
 
   @override
   void initState() {
     super.initState();
     _loadAppFont();
+    _loadAppTheme();
   }
 
   Future<void> _loadAppFont() async {
@@ -93,6 +125,17 @@ class _NotebookAppState extends State<NotebookApp> {
     final selected = saved == null || saved.isEmpty || legacyDefaults.contains(saved) ? 'system-default' : saved;
     setState(() => appFontFamily = selected);
     if (saved != selected) await repository.saveAppFont(selected);
+  }
+
+  Future<void> _loadAppTheme() async {
+    final saved = await repository.loadAppTheme();
+    if (!mounted) return;
+    setState(() => appThemeName = ['سفید', 'سیاه', 'دودی', 'نقره‌ای'].contains(saved) ? saved : 'دودی');
+  }
+
+  Future<void> _setAppTheme(String theme) async {
+    setState(() => appThemeName = theme);
+    await repository.saveAppTheme(theme);
   }
 
   Future<void> _setAppFont(String family) async {
@@ -105,14 +148,7 @@ class _NotebookAppState extends State<NotebookApp> {
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     title: 'دفترچه ترید',
-    theme: ThemeData(
-      useMaterial3: true,
-      fontFamily: appFontFamily == 'system-default' ? null : appFontFamily,
-      textTheme: appFontFamily == 'Estedad' ? GoogleFonts.getTextTheme('Estedad') : null,
-      primaryTextTheme: appFontFamily == 'Estedad' ? GoogleFonts.getTextTheme('Estedad') : null,
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6956A5)),
-      scaffoldBackgroundColor: const Color(0xFFF7F5FB),
-    ),
+    theme: _buildAppTheme(appThemeName, appFontFamily),
     localizationsDelegates: const [
       GlobalMaterialLocalizations.delegate,
       GlobalCupertinoLocalizations.delegate,
@@ -122,7 +158,9 @@ class _NotebookAppState extends State<NotebookApp> {
     supportedLocales: const [Locale('fa'), Locale('en')],
     home: NotesPage(
       appFontFamily: appFontFamily,
+      appThemeName: appThemeName,
       onAppFontChanged: _setAppFont,
+      onAppThemeChanged: _setAppTheme,
     ),
   );
 }
@@ -131,8 +169,10 @@ Future<void> _ignoreAppFontChange(String _) async {}
 
 class NotesPage extends StatefulWidget {
   final String appFontFamily;
+  final String appThemeName;
   final Future<void> Function(String) onAppFontChanged;
-  const NotesPage({super.key, this.appFontFamily = 'system-default', this.onAppFontChanged = _ignoreAppFontChange});
+  final Future<void> Function(String) onAppThemeChanged;
+  const NotesPage({super.key, this.appFontFamily = 'system-default', this.appThemeName = 'دودی', this.onAppFontChanged = _ignoreAppFontChange, this.onAppThemeChanged = _ignoreAppFontChange});
   @override
   State<NotesPage> createState() => _NotesPageState();
 }
@@ -147,6 +187,8 @@ class _NotesPageState extends State<NotesPage> {
   String? selectedFolderId;
   bool loading=true;
   final customFonts=<String, String>{};
+  final randomThemeNames=<String>{};
+  final textColorPalette=<int>[];
   static const defaultThemes=[NoteTheme('یاسی',0xFFEDE7F6),NoteTheme('آبی',0xFFE3F2FD),NoteTheme('سبز',0xFFE8F5E9),NoteTheme('صورتی',0xFFFCE4EC),NoteTheme('هلویی',0xFFFFEAD5)];
 
   @override
@@ -157,10 +199,14 @@ class _NotesPageState extends State<NotesPage> {
       final loadedThemes = await repository.loadThemes();
       final loadedFolders = await repository.loadFolders();
       final loadedFonts = await repository.loadCustomFonts();
+      final loadedRandomThemes = await repository.loadRandomThemeNames();
+      final loadedTextColors = await repository.loadTextColorPalette();
       notes.addAll(loadedNotes);
       themes.addAll(loadedThemes);
       folders.addAll(loadedFolders);
       customFonts.addAll(loadedFonts);
+      randomThemeNames.addAll(loadedRandomThemes);
+      textColorPalette.addAll(loadedTextColors);
       for (final entry in customFonts.entries) {
         try {
           final file = File(entry.value);
@@ -172,8 +218,10 @@ class _NotesPageState extends State<NotesPage> {
         } catch (_) { /* An unavailable custom font must not block opening the notebook. */ }
       }
       if (themes.isEmpty) themes.addAll(defaultThemes);
+      if (randomThemeNames.isEmpty) randomThemeNames.addAll(themes.map((t) => t.name));
       if (mounted) setState(() => loading = false);
       await persistThemes();
+      await repository.saveRandomThemeNames(randomThemeNames.toList());
     } catch (error, stackTrace) {
       debugPrint('Notebook load failed: $error\\n$stackTrace');
       if (mounted) setState(() => loading = false);
@@ -210,20 +258,32 @@ class _NotesPageState extends State<NotesPage> {
     await persist();
   }
   Future<void> manageThemes() async {
-    final result=await showDialog<List<NoteTheme>>(context:context,builder:(context)=>ThemeManagerDialog(
-      initialThemes:List.of(themes),
-      customFonts:customFonts.keys.toList(),
-      appFontFamily:widget.appFontFamily,
-      onAppFontChanged:widget.onAppFontChanged,
-      onAddCustomFont:() async {
-        await addCustomFont();
-        return customFonts.keys.toList();
-      },
-    ));
-    if(result!=null){
-      setState((){themes..clear()..addAll(result);});
-      await persistThemes();
-    }
+    final result = await showDialog<ThemeManagerResult>(
+      context: context,
+      builder: (context) => ThemeManagerDialog(
+        initialThemes: List.of(themes),
+        customFonts: customFonts.keys.toList(),
+        appFontFamily: widget.appFontFamily,
+        appThemeName: widget.appThemeName,
+        initialRandomThemeNames: randomThemeNames.toList(),
+        initialTextColorPalette: List<int>.of(textColorPalette),
+        onAddCustomFont: () async {
+          await addCustomFont();
+          return customFonts.keys.toList();
+        },
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      themes..clear()..addAll(result.themes);
+      randomThemeNames..clear()..addAll(result.randomThemeNames);
+      textColorPalette..clear()..addAll(result.textColorPalette);
+    });
+    await persistThemes();
+    await repository.saveRandomThemeNames(randomThemeNames.toList());
+    await repository.saveTextColorPalette(textColorPalette);
+    await widget.onAppFontChanged(result.appFontFamily);
+    await widget.onAppThemeChanged(result.appThemeName);
   }
   Future<void> addCustomFont() async {
     final picked=await FilePicker.pickFiles(type:FileType.custom,allowedExtensions:['ttf','otf']);
@@ -301,7 +361,9 @@ class _NotesPageState extends State<NotesPage> {
     return TextSpan(style: baseStyle, children: spans);
   }
   Future<void> edit([Note? note]) async {
-    final selected=note==null?(themes.isEmpty?defaultThemes.first:themes[Random().nextInt(themes.length)]):NoteTheme('فعلی',note.themeColor,note.themeTextColor,note.themeFontFamily);
+    final availableThemes = themes.where((theme) => randomThemeNames.contains(theme.name)).toList();
+    final themePool = availableThemes.isNotEmpty ? availableThemes : (themes.isEmpty ? defaultThemes : themes);
+    final selected=note==null?themePool[Random().nextInt(themePool.length)]:NoteTheme('فعلی',note.themeColor,note.themeTextColor,note.themeFontFamily);
     final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,initialFolderId:note?.folderId??selectedFolderId)));
     if(result==null)return;
     setState(() { final i=notes.indexWhere((n)=>n.id==result.id); if(i<0){notes.add(result);}else{notes[i]=result;} });
