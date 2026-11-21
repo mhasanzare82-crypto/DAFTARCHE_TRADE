@@ -196,7 +196,7 @@ class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
   void _setColorChannel(bool isBackground, int channel, double value) {
     final current = Color(isBackground ? background : textColor);
     final channels = [current.red, current.green, current.blue];
-    channels[channel] = value.round().clamp(0, 255);
+    channels[channel] = value.round().clamp(0, 255).toInt();
     final updated = Color.fromARGB(255, channels[0], channels[1], channels[2]).value;
     setState(() {
       if (isBackground) {
