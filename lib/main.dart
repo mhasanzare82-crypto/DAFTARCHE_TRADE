@@ -10,6 +10,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:xml/xml.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:dart_quill_delta/dart_quill_delta.dart' as delta;
@@ -76,7 +77,7 @@ class NotebookApp extends StatefulWidget {
 }
 
 class _NotebookAppState extends State<NotebookApp> {
-  String appFontFamily = 'sans-serif';
+  String appFontFamily = 'Estedad';
   final NotebookRepository repository = NotebookRepository();
 
   @override
@@ -87,12 +88,15 @@ class _NotebookAppState extends State<NotebookApp> {
 
   Future<void> _loadAppFont() async {
     final saved = await repository.loadAppFont();
-    if (!mounted || saved == null || saved.isEmpty) return;
-    setState(() => appFontFamily = saved);
+    if (!mounted) return;
+    final legacyDefaults = {'sans-serif', 'serif', 'monospace', 'sans-serif-condensed', 'sans-serif-light', 'sans-serif-medium', 'cursive'};
+    final selected = saved == null || saved.isEmpty || legacyDefaults.contains(saved) ? 'Estedad' : saved;
+    setState(() => appFontFamily = selected);
+    if (saved != selected) await repository.saveAppFont(selected);
   }
 
   Future<void> _setAppFont(String family) async {
-    final normalized = family.trim().isEmpty ? 'sans-serif' : family.trim();
+    final normalized = family.trim().isEmpty ? 'Estedad' : family.trim();
     setState(() => appFontFamily = normalized);
     await repository.saveAppFont(normalized);
   }
@@ -104,6 +108,8 @@ class _NotebookAppState extends State<NotebookApp> {
     theme: ThemeData(
       useMaterial3: true,
       fontFamily: appFontFamily,
+      textTheme: appFontFamily == 'Estedad' ? GoogleFonts.getTextTheme('Estedad') : null,
+      primaryTextTheme: appFontFamily == 'Estedad' ? GoogleFonts.getTextTheme('Estedad') : null,
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6956A5)),
       scaffoldBackgroundColor: const Color(0xFFF7F5FB),
     ),
@@ -126,7 +132,7 @@ Future<void> _ignoreAppFontChange(String _) async {}
 class NotesPage extends StatefulWidget {
   final String appFontFamily;
   final Future<void> Function(String) onAppFontChanged;
-  const NotesPage({super.key, this.appFontFamily = 'sans-serif', this.onAppFontChanged = _ignoreAppFontChange});
+  const NotesPage({super.key, this.appFontFamily = 'Estedad', this.onAppFontChanged = _ignoreAppFontChange});
   @override
   State<NotesPage> createState() => _NotesPageState();
 }
