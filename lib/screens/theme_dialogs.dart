@@ -7,7 +7,7 @@ class ThemeManagerDialog extends StatefulWidget {
   final String appFontFamily;
   final Future<void> Function(String)? onAppFontChanged;
   final Future<List<String>> Function()? onAddCustomFont;
-  const ThemeManagerDialog({super.key, required this.initialThemes, this.customFonts = const [], this.appFontFamily = 'sans-serif', this.onAppFontChanged, this.onAddCustomFont});
+  const ThemeManagerDialog({super.key, required this.initialThemes, this.customFonts = const [], this.appFontFamily = 'Estedad', this.onAppFontChanged, this.onAddCustomFont});
   @override
   State<ThemeManagerDialog> createState() => _ThemeManagerDialogState();
 }
@@ -71,7 +71,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
                             const SizedBox(height: 4),
                             const Text('این فونت روی متن‌های عمومی برنامه، دکمه‌ها و تنظیمات اعمال می‌شود.', style: TextStyle(fontSize: 12, color: Colors.black54)),
                             const SizedBox(height: 10),
-                            Wrap(spacing: 6, runSpacing: 6, children: ['sans-serif','serif','monospace','sans-serif-condensed','sans-serif-light','sans-serif-medium','cursive', ...availableFonts].toSet().map((family) => ChoiceChip(
+                            Wrap(spacing: 6, runSpacing: 6, children: ['Estedad', ...availableFonts].toSet().map((family) => ChoiceChip(
                               label: Text(family, style: TextStyle(fontFamily: family, fontSize: 12)),
                               selected: selectedAppFont == family,
                               onSelected: (_) async {
@@ -143,13 +143,13 @@ class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
     0xFF827717,0xFF5D4037,0xFF4E342E,0xFF6D4C41,0xFF880E4F,
     0xFFAD1457,0xFF6A1B9A,0xFF4527A0,0xFFB71C1C,0xFFFFFFFF,
   ];
-  static const commonFonts=['sans-serif','serif','monospace','sans-serif-condensed','sans-serif-light','sans-serif-medium','cursive'];
+  static const commonFonts=['Estedad'];
   @override
   void initState(){
     super.initState();
     final t=widget.theme;
     name=TextEditingController(text:t?.name??'');
-    font=TextEditingController(text:t?.fontFamily??'sans-serif');
+    font=TextEditingController(text:t?.fontFamily??'Estedad');
     background=t?.backgroundColor??backgrounds[3];
     textColor=t?.textColor??textColors.first;
   }
@@ -179,7 +179,7 @@ class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
         const SizedBox(height:6),
         Wrap(spacing:6,children:[...commonFonts,...widget.customFonts].map((f)=>ActionChip(label:Text(f,style:TextStyle(fontFamily:f,fontSize:11)),onPressed:()=>setState(()=>font.text=f))).toList()),
         const SizedBox(height:16),const Text('پیش‌نمایش'),
-        Container(width:double.infinity,padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:Color(background),borderRadius:BorderRadius.circular(12)),child:Text('یادداشت نمونه؛ این متن با فونت و رنگ انتخابی نمایش داده می‌شود.',style:TextStyle(color:Color(textColor),fontFamily:font.text.trim().isEmpty?'sans-serif':font.text.trim(),fontSize:16))),
+        Container(width:double.infinity,padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:Color(background),borderRadius:BorderRadius.circular(12)),child:Text('یادداشت نمونه؛ این متن با فونت و رنگ انتخابی نمایش داده می‌شود.',style:TextStyle(color:Color(textColor),fontFamily:font.text.trim().isEmpty?'Estedad':font.text.trim(),fontSize:16))),
       ],
     ))),
     actions:[
