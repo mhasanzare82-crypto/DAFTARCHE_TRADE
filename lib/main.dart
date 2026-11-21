@@ -447,24 +447,75 @@ class _NotesPageState extends State<NotesPage> {
     }
     if (operations.isEmpty) operations.add({'insert': '\n'});
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    final title = file.name.replaceFirst(RegExp(r'\\.[^.]+
+    final title = file.name.replaceFirst(RegExp(r'\.[^.]+$'), '');
+    return Note(id, title, '__quill_note_v1__' + jsonEncode(operations), DateTime.now(), imagePaths);
+  }
+
+  Future<Note> _noteFromTxt(PlatformFile file) async {
+    final bytes = await file.readAsBytes();
+    final text = utf8.decode(bytes, allowMalformed: true).replaceFirst('\uFEFF', '');
+    final normalizedText = text.isEmpty || text.endsWith('\n') ? text : text + '\n';
+    final operations = <Map<String, dynamic>>[
+      {'insert': normalizedText.isEmpty ? '\n' : normalizedText},
+    ];
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final title = file.name.replaceFirst(RegExp(r'\.[^.]+$'), '');
+    return Note(
+      id,
+      title,
+      '__quill_note_v1__' + jsonEncode(operations),
+      DateTime.now(),
+      <String>[],
+    );
+  }
+
+  Future<void> importDocx() async {
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['docx', 'txt'],
+        allowMultiple: true,
+      );
+      if (files.isEmpty) return;
+      final imported = <Note>[];
+      final failures = <String>[];
+      for (final file in files) {
+        try {
+          final extension = (file.extension ?? file.name.split('.').last).toLowerCase();
+          final Note? note = extension == 'txt'
+              ? await _noteFromTxt(file)
+              : extension == 'docx'
+                  ? await _noteFromDocx(file)
+                  : null;
+          if (note != null) {
+            imported.add(note);
+          } else {
+            failures.add(file.name);
+          }
+        } catch (error) {
+          debugPrint('File import failed for ' + file.name + ': ' + error.toString());
+          failures.add(file.name);
+        }
+      }
       if (imported.isNotEmpty) {
         setState(() => notes.addAll(imported));
         await persist();
       }
       if (mounted) {
         final message = failures.isEmpty
-            ? '${imported.length} فایل Word با موفقیت وارد شد'
-            : '${imported.length} فایل وارد شد؛ ${failures.length} فایل ناموفق بود: ${failures.take(2).join('، ')}';
+            ? imported.length.toString() + ' فایل با موفقیت به یادداشت تبدیل شد'
+            : imported.length.toString() + ' فایل وارد شد؛ ' +
+                failures.length.toString() + ' فایل ناموفق بود: ' +
+                failures.take(2).join('، ');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message)),
         );
       }
     } catch (error) {
-      debugPrint('DOCX import selection failed: $error');
+      debugPrint('File import selection failed: ' + error.toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ورود فایل‌ها انجام نشد: $error')),
+          SnackBar(content: Text('ورود فایل‌ها انجام نشد: ' + error.toString())),
         );
       }
     }
