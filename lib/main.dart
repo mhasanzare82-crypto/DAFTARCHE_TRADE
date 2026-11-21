@@ -515,11 +515,11 @@ class _NotesPageState extends State<NotesPage> {
           final target = rid == null ? null : relationships[rid];
           if (target == null) continue;
           final resolved = Uri.parse('word/document.xml').resolve(target).path;
-          final normalized = resolved.replaceAll('\\', '/').split('/').fold<String>((acc, part) {
+          final normalized = resolved.replaceAll('\\', '/').split('/').fold<String>('', (acc, part) {
             if (part.isEmpty || part == '.') return acc;
             if (part == '..') return acc.contains('/') ? acc.substring(0, acc.lastIndexOf('/')) : '';
             return acc.isEmpty ? part : '$acc/$part';
-          }, '');
+          });
           final mediaFile = zip.findFile(normalized);
           if (mediaFile == null) continue;
           final ext = normalized.contains('.') ? normalized.substring(normalized.lastIndexOf('.')) : '.png';
