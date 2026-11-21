@@ -4,8 +4,10 @@ import '../models/note.dart';
 class ThemeManagerDialog extends StatefulWidget {
   final List<NoteTheme> initialThemes;
   final List<String> customFonts;
+  final String appFontFamily;
+  final Future<void> Function(String)? onAppFontChanged;
   final Future<List<String>> Function()? onAddCustomFont;
-  const ThemeManagerDialog({super.key, required this.initialThemes, this.customFonts = const [], this.onAddCustomFont});
+  const ThemeManagerDialog({super.key, required this.initialThemes, this.customFonts = const [], this.appFontFamily = 'sans-serif', this.onAppFontChanged, this.onAddCustomFont});
   @override
   State<ThemeManagerDialog> createState() => _ThemeManagerDialogState();
 }
@@ -13,8 +15,9 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
   late List<NoteTheme> items;
   late List<String> availableFonts;
   bool addingFont = false;
+  late String selectedAppFont;
   @override
-  void initState() { super.initState(); items = List.of(widget.initialThemes); availableFonts = List.of(widget.customFonts); }
+  void initState() { super.initState(); items = List.of(widget.initialThemes); availableFonts = List.of(widget.customFonts); selectedAppFont = widget.appFontFamily; }
   Future<void> addFont() async {
     if (widget.onAddCustomFont == null || addingFont) return;
     setState(() => addingFont = true);
@@ -55,11 +58,35 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
         title: const Text('مدیریت تم‌ها'),
         content: SizedBox(
           width: 420,
-          child: items.isEmpty
-              ? const Text('هنوز تمی نساخته‌ای.')
-              : ListView(
+          child: ListView(
                   shrinkWrap: true,
-                  children: items.map((theme) => Card(
+                  children: [
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('فونت نوشته‌های برنامه', style: TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            const Text('این فونت روی متن‌های عمومی برنامه، دکمه‌ها و تنظیمات اعمال می‌شود.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                            const SizedBox(height: 10),
+                            Wrap(spacing: 6, runSpacing: 6, children: ['sans-serif','serif','monospace','sans-serif-condensed','sans-serif-light','sans-serif-medium','cursive', ...availableFonts].toSet().map((family) => ChoiceChip(
+                              label: Text(family, style: TextStyle(fontFamily: family, fontSize: 12)),
+                              selected: selectedAppFont == family,
+                              onSelected: (_) async {
+                                setState(() => selectedAppFont = family);
+                                await widget.onAppFontChanged?.call(family);
+                              },
+                            )).toList()),
+                            const SizedBox(height: 8),
+                            Text('پیش‌نمایش نوشته‌های برنامه', style: TextStyle(fontFamily: selectedAppFont, fontSize: 15)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (items.isEmpty) const Padding(padding: EdgeInsets.all(12), child: Text('هنوز تمی نساخته‌ای.')),
+                    ...items.map((theme) => Card(
                     color: Color(theme.backgroundColor),
                     child: ListTile(
                       title: Text(theme.name, style: TextStyle(color: Color(theme.textColor), fontFamily: theme.fontFamily)),
@@ -71,7 +98,8 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
                       ]),
                       onTap: () => editTheme(theme),
                     ),
-                  )).toList(),
+                  )),
+                  ],
                 ),
         ),
         actions: [
