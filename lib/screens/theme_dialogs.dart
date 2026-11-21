@@ -1,22 +1,33 @@
 import 'package:flutter/material.dart';
 import '../models/note.dart';
 
+class ThemeManagerResult {
+  final List<NoteTheme> themes;
+  final List<String> randomThemeNames;
+  final List<int> textColorPalette;
+  final String appFontFamily;
+  final String appThemeName;
+  const ThemeManagerResult(this.themes, this.randomThemeNames, this.textColorPalette, this.appFontFamily, this.appThemeName);
+}
+
 class ThemeManagerDialog extends StatefulWidget {
   final List<NoteTheme> initialThemes;
   final List<String> customFonts;
   final String appFontFamily;
-  final Future<void> Function(String)? onAppFontChanged;
+  final String appThemeName;
+  final List<String> initialRandomThemeNames;
+  final List<int> initialTextColorPalette;
   final Future<List<String>> Function()? onAddCustomFont;
-
   const ThemeManagerDialog({
     super.key,
     required this.initialThemes,
     this.customFonts = const [],
-    this.appFontFamily = 'Estedad',
-    this.onAppFontChanged,
+    this.appFontFamily = 'system-default',
+    this.appThemeName = 'دودی',
+    this.initialRandomThemeNames = const [],
+    this.initialTextColorPalette = const [],
     this.onAddCustomFont,
   });
-
   @override
   State<ThemeManagerDialog> createState() => _ThemeManagerDialogState();
 }
@@ -24,15 +35,27 @@ class ThemeManagerDialog extends StatefulWidget {
 class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
   late List<NoteTheme> items;
   late List<String> availableFonts;
+  late List<String> randomThemeNames;
+  late List<int> textColorPalette;
   late String selectedAppFont;
+  late String selectedAppTheme;
+  double hue = 220, saturation = .12, brightness = .82;
   bool addingFont = false;
+  static const builtInFonts = ['Estedad'];
+  Color get selectedColor => HSVColor.fromAHSV(1, hue, saturation, brightness).toColor();
+  Color readableText(Color c) => c.computeLuminance() > .42 ? const Color(0xFF211D27) : Colors.white;
 
   @override
   void initState() {
     super.initState();
     items = List.of(widget.initialThemes);
-    availableFonts = List.of(widget.customFonts);
+    availableFonts = {...builtInFonts, ...widget.customFonts}.toList();
+    randomThemeNames = widget.initialRandomThemeNames.isEmpty
+        ? items.map((e) => e.name).toList()
+        : List.of(widget.initialRandomThemeNames);
+    textColorPalette = List.of(widget.initialTextColorPalette);
     selectedAppFont = widget.appFontFamily;
+    selectedAppTheme = widget.appThemeName;
   }
 
   Future<void> addFont() async {
@@ -40,7 +63,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
     setState(() => addingFont = true);
     try {
       final updated = await widget.onAddCustomFont!();
-      if (mounted) setState(() => availableFonts = List.of(updated));
+      if (mounted) setState(() => availableFonts = {...builtInFonts, ...updated}.toList());
     } finally {
       if (mounted) setState(() => addingFont = false);
     }
@@ -53,11 +76,14 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
     );
     if (result == null || !mounted) return;
     setState(() {
-      if (old == null) {
-        items.add(result);
-      } else {
+      if (old == null) { items.add(result); randomThemeNames.add(result.name); }
+      else {
         final index = items.indexOf(old);
-        if (index >= 0) items[index] = result;
+        if (index >= 0) {
+          final wasEnabled = randomThemeNames.remove(old.name);
+          items[index] = result;
+          if (wasEnabled) randomThemeNames.add(result.name);
+        }
       }
     });
   }
@@ -65,224 +91,184 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
   Future<void> deleteTheme(NoteTheme theme) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (c) => AlertDialog(
         title: const Text('حذف تم؟'),
         content: Text('تم «${theme.name}» حذف شود؟'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('انصراف'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('حذف'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('انصراف')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('حذف')),
         ],
       ),
     );
-    if (confirmed == true && mounted) setState(() => items.remove(theme));
-  }
-
-  Widget _fontCard(String family) {
-    final parts = family.replaceFirst('custom_', '').split('_');
-    if (parts.length > 1 && int.tryParse(parts.last) != null) {
-      parts.removeLast();
+    if (confirmed == true && mounted) {
+      setState(() { items.remove(theme); randomThemeNames.remove(theme.name); });
     }
-    final displayName = family == 'system-default' ? 'فونت گوشی (پیش‌فرض سیستم)' : family == 'Estedad' ? 'استعداد (Estedad)' : parts.join(' ');
-    final selected = selectedAppFont == family;
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 9),
-      padding: const EdgeInsets.all(11),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: selected
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).dividerColor,
-          width: selected ? 1.8 : 1,
-        ),
-        color: selected
-            ? Theme.of(context).colorScheme.primary.withOpacity(.06)
-            : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  displayName,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-              if (selected)
-                const Icon(Icons.check_circle, color: Colors.green, size: 19),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: selected
-                    ? null
-                    : () async {
-                        setState(() => selectedAppFont = family);
-                        await widget.onAppFontChanged?.call(family);
-                      },
-                child: Text(selected ? 'انتخاب شده' : 'انتخاب فونت'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 7),
-          Text(
-            'نمونه فونت',
-            style: TextStyle(
-              fontFamily: family == 'system-default' ? null : family,
-              fontSize: 21,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            'متن‌های برنامه، عنوان‌ها و دکمه‌ها با این فونت نمایش داده می‌شوند.',
-            style: TextStyle(
-              fontFamily: family == 'system-default' ? null : family,
-              fontSize: 13,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
   }
+
+  void addBackgroundColor() {
+    final value = selectedColor.toARGB32();
+    if (items.any((e) => e.backgroundColor == value)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('این رنگ از قبل در پالت هست.')));
+      return;
+    }
+    setState(() {
+      final name = 'رنگ ${items.length + 1}';
+      items.add(NoteTheme(name, value, readableText(selectedColor).toARGB32(), 'sans-serif'));
+      randomThemeNames.add(name);
+    });
+  }
+
+  void addTextColor() {
+    final value = selectedColor.toARGB32();
+    if (textColorPalette.contains(value)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('این رنگ از قبل در پالت متن هست.')));
+      return;
+    }
+    setState(() => textColorPalette.add(value));
+  }
+
+  Widget _section(String title, IconData icon, List<Widget> children) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 8), Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+        const SizedBox(height: 10),
+        ...children,
+      ]),
+    ),
+  );
 
   @override
-  Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: AlertDialog(
-        title: const Text('مدیریت تم‌ها'),
-        content: SizedBox(
-          width: 420,
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.text_fields, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'فونت برنامه',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      const Text(
-                        'فونت پیش‌فرض گوشی یا فونت دلخواهت را برای نوشته‌های برنامه انتخاب کن.',
-                        style: TextStyle(fontSize: 12, color: Colors.black54),
-                      ),
-                      const SizedBox(height: 12),
-                      ...['system-default', 'Estedad', ...availableFonts].toSet().map(_fontCard),
-                      const SizedBox(height: 4),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: addingFont || widget.onAddCustomFont == null
-                              ? null
-                              : addFont,
-                          icon: addingFont
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.add),
-                          label: Text(
-                            addingFont
-                                ? 'در حال افزودن فونت...'
-                                : 'افزودن فونت جدید (TTF / OTF)',
-                          ),
-                        ),
-                      ),
-                    ],
+  Widget build(BuildContext context) => Directionality(
+    textDirection: TextDirection.rtl,
+    child: Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+      child: SizedBox(
+        width: 540,
+        height: MediaQuery.sizeOf(context).height * .88,
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+            child: Row(children: [
+              const Expanded(child: Text('تنظیمات و شخصی‌سازی', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold))),
+              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+            ]),
+          ),
+          const Divider(height: 1),
+          Expanded(child: ListView(padding: const EdgeInsets.all(14), children: [
+            _section('۱. فونت رابط کاربری', Icons.font_download_outlined, [
+              const Text('فونت منوها، عنوان‌ها و دکمه‌های برنامه را انتخاب کن.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: ['system-default', 'Estedad', ...availableFonts].toSet().contains(selectedAppFont) ? selectedAppFont : 'system-default',
+                decoration: const InputDecoration(labelText: 'فونت برنامه', border: OutlineInputBorder()),
+                items: ['system-default', 'Estedad', ...availableFonts].toSet().map((f) => DropdownMenuItem(value: f, child: Text(f == 'system-default' ? 'فونت پیش‌فرض گوشی' : f, style: TextStyle(fontFamily: f == 'system-default' ? null : f)))).toList(),
+                onChanged: (v) { if (v != null) setState(() => selectedAppFont = v); },
+              ),
+              const SizedBox(height: 8),
+              SizedBox(width: double.infinity, child: OutlinedButton.icon(
+                onPressed: addingFont ? null : addFont,
+                icon: addingFont ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.upload_file_outlined),
+                label: Text(addingFont ? 'در حال افزودن فونت...' : 'افزودن فونت دلخواه (TTF / OTF)'),
+              )),
+            ]),
+            _section('۲. تم اصلی برنامه', Icons.contrast_outlined, [
+              const Text('تم کلی محیط برنامه مستقل از رنگ‌بندی تک‌تک یادداشت‌هاست.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: ['سفید', 'سیاه', 'دودی', 'نقره‌ای'].contains(selectedAppTheme) ? selectedAppTheme : 'دودی',
+                decoration: const InputDecoration(labelText: 'پوسته برنامه', border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: 'سفید', child: Text('سفید')),
+                  DropdownMenuItem(value: 'سیاه', child: Text('سیاه')),
+                  DropdownMenuItem(value: 'دودی', child: Text('دودی')),
+                  DropdownMenuItem(value: 'نقره‌ای', child: Text('نقره‌ای')),
+                ],
+                onChanged: (v) { if (v != null) setState(() => selectedAppTheme = v); },
+              ),
+            ]),
+            _section('۳. رنگ‌ساز و پالت‌ها', Icons.palette_outlined, [
+              const Text('رنگ را با سه کنترل HSV تنظیم کن و به پالت پس‌زمینه یا متن اضافه کن.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+              const SizedBox(height: 8),
+              _slider('ته‌رنگ', hue, 0, 360, (v) => setState(() => hue = v), hue.round().toString()),
+              _slider('اشباع', saturation, 0, 1, (v) => setState(() => saturation = v), '${(saturation * 100).round()}٪'),
+              _slider('روشنایی', brightness, 0, 1, (v) => setState(() => brightness = v), '${(brightness * 100).round()}٪'),
+              Container(height: 48, decoration: BoxDecoration(color: selectedColor, borderRadius: BorderRadius.circular(12)), alignment: Alignment.center, child: Text('پیش‌نمایش رنگ', style: TextStyle(color: readableText(selectedColor), fontWeight: FontWeight.bold))),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, children: [
+                FilledButton.tonalIcon(onPressed: addBackgroundColor, icon: const Icon(Icons.wallpaper_outlined), label: const Text('افزودن پس‌زمینه')),
+                OutlinedButton.icon(onPressed: addTextColor, icon: const Icon(Icons.format_color_text), label: const Text('افزودن رنگ متن')),
+              ]),
+              const Divider(height: 24),
+              Row(children: [
+                Expanded(child: Text('پالت پس‌زمینه (${items.length})', style: const TextStyle(fontWeight: FontWeight.w600))),
+                TextButton(onPressed: items.isEmpty ? null : () => setState(() { items.clear(); randomThemeNames.clear(); }), child: const Text('پاک‌کردن')),
+              ]),
+              if (items.isEmpty) const Text('پالت پس‌زمینه خالی است.')
+              else Wrap(spacing: 8, runSpacing: 8, children: items.map((t) => Tooltip(
+                message: '${t.name} — برای حذف لمس طولانی',
+                child: GestureDetector(
+                  onLongPress: () => deleteTheme(t),
+                  child: FilterChip(
+                    selected: randomThemeNames.contains(t.name),
+                    label: Text(t.name, style: TextStyle(color: Color(t.textColor))),
+                    avatar: CircleAvatar(backgroundColor: Color(t.backgroundColor)),
+                    onSelected: (v) => setState(() { if (v) { if (!randomThemeNames.contains(t.name)) randomThemeNames.add(t.name); } else { randomThemeNames.remove(t.name); } }),
                   ),
                 ),
-              ),
-              if (items.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text('هنوز تمی نساخته‌ای.'),
+              )).toList()),
+              const SizedBox(height: 6),
+              const Text('انتخاب هر تم مشخص می‌کند در تخصیص تصادفی به یادداشت‌های جدید استفاده شود. لمس طولانی برای حذف.', style: TextStyle(fontSize: 11, color: Colors.black54)),
+              Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => editTheme(), icon: const Icon(Icons.add), label: const Text('ساخت تم با رنگ متن و فونت اختصاصی'))),
+              const Divider(height: 24),
+              Row(children: [
+                Expanded(child: Text('پالت رنگ متن (${textColorPalette.length})', style: const TextStyle(fontWeight: FontWeight.w600))),
+                TextButton(onPressed: textColorPalette.isEmpty ? null : () => setState(textColorPalette.clear), child: const Text('پاک‌کردن')),
+              ]),
+              if (textColorPalette.isEmpty) const Text('هنوز رنگ متنی اضافه نشده است.')
+              else Wrap(spacing: 8, runSpacing: 8, children: List.generate(textColorPalette.length, (i) => GestureDetector(
+                onLongPress: () => setState(() => textColorPalette.removeAt(i)),
+                child: Container(width: 38, height: 38, decoration: BoxDecoration(color: Color(textColorPalette[i]), shape: BoxShape.circle, border: Border.all(color: Colors.black26)), child: Icon(Icons.format_color_text, size: 17, color: Color(textColorPalette[i]).computeLuminance() > .42 ? Colors.black : Colors.white)),
+              ))),
+              const Text('برای حذف رنگ متن، انگشت را روی آن نگه دار.', style: TextStyle(fontSize: 11, color: Colors.black54)),
+            ]),
+            _section('۴. مدیریت تم‌های اختصاصی یادداشت', Icons.style_outlined, [
+              if (items.isEmpty) const Text('هنوز تمی ساخته نشده است.'),
+              ...items.map((theme) => Card(
+                color: Color(theme.backgroundColor),
+                child: ListTile(
+                  title: Text(theme.name, style: TextStyle(color: Color(theme.textColor), fontFamily: theme.fontFamily)),
+                  subtitle: Text('پس‌زمینه، رنگ متن و فونت', style: TextStyle(color: Color(theme.textColor).withOpacity(.75))),
+                  leading: Icon(Icons.text_fields, color: Color(theme.textColor)),
+                  trailing: Wrap(children: [
+                    IconButton(onPressed: () => editTheme(theme), icon: Icon(Icons.edit_outlined, color: Color(theme.textColor))),
+                    IconButton(onPressed: () => deleteTheme(theme), icon: Icon(Icons.delete_outline, color: Color(theme.textColor))),
+                  ]),
                 ),
-              ...items.map(
-                (theme) => Card(
-                  color: Color(theme.backgroundColor),
-                  child: ListTile(
-                    title: Text(
-                      theme.name,
-                      style: TextStyle(
-                        color: Color(theme.textColor),
-                        fontFamily: theme.fontFamily,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'پس‌زمینه، رنگ متن و فونت',
-                      style: TextStyle(
-                        color: Color(theme.textColor).withOpacity(.75),
-                      ),
-                    ),
-                    leading: CircleAvatar(
-                      backgroundColor: Color(theme.backgroundColor),
-                      child: Icon(
-                        Icons.text_fields,
-                        color: Color(theme.textColor),
-                      ),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          tooltip: 'ویرایش',
-                          onPressed: () => editTheme(theme),
-                          icon: const Icon(Icons.edit_outlined),
-                        ),
-                        IconButton(
-                          tooltip: 'حذف',
-                          onPressed: () => deleteTheme(theme),
-                          icon: const Icon(Icons.delete_outline),
-                        ),
-                      ],
-                    ),
-                    onTap: () => editTheme(theme),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: () => editTheme(),
-            icon: const Icon(Icons.add),
-            label: const Text('ساخت تم'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('انصراف'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, items),
-            child: const Text('ذخیره'),
-          ),
-        ],
+              )),
+              OutlinedButton.icon(onPressed: () => editTheme(), icon: const Icon(Icons.add), label: const Text('ساخت تم جدید')),
+            ]),
+          ])),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, ThemeManagerResult(List.of(items), List.of(randomThemeNames), List.of(textColorPalette), selectedAppFont, selectedAppTheme)),
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('ذخیره تنظیمات'),
+            ),
+          ])),
+        ]),
       ),
-    );
-  }
+    ),
+  );
+
+  Widget _slider(String label, double value, double min, double max, ValueChanged<double> changed, String text) => Row(children: [
+    SizedBox(width: 62, child: Text(label, style: const TextStyle(fontSize: 12))),
+    Expanded(child: Slider(value: value, min: min, max: max, onChanged: changed)),
+    SizedBox(width: 42, child: Text(text, textAlign: TextAlign.left, style: const TextStyle(fontSize: 11))),
+  ]);
 }
 
 class ThemeEditorDialog extends StatefulWidget {
