@@ -7,17 +7,34 @@ class ThemeManagerDialog extends StatefulWidget {
   final String appFontFamily;
   final Future<void> Function(String)? onAppFontChanged;
   final Future<List<String>> Function()? onAddCustomFont;
-  const ThemeManagerDialog({super.key, required this.initialThemes, this.customFonts = const [], this.appFontFamily = 'Estedad', this.onAppFontChanged, this.onAddCustomFont});
+
+  const ThemeManagerDialog({
+    super.key,
+    required this.initialThemes,
+    this.customFonts = const [],
+    this.appFontFamily = 'Estedad',
+    this.onAppFontChanged,
+    this.onAddCustomFont,
+  });
+
   @override
   State<ThemeManagerDialog> createState() => _ThemeManagerDialogState();
 }
+
 class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
   late List<NoteTheme> items;
   late List<String> availableFonts;
-  bool addingFont = false;
   late String selectedAppFont;
+  bool addingFont = false;
+
   @override
-  void initState() { super.initState(); items = List.of(widget.initialThemes); availableFonts = List.of(widget.customFonts); selectedAppFont = widget.appFontFamily; }
+  void initState() {
+    super.initState();
+    items = List.of(widget.initialThemes);
+    availableFonts = List.of(widget.customFonts);
+    selectedAppFont = widget.appFontFamily;
+  }
+
   Future<void> addFont() async {
     if (widget.onAddCustomFont == null || addingFont) return;
     setState(() => addingFont = true);
@@ -28,14 +45,23 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
       if (mounted) setState(() => addingFont = false);
     }
   }
+
   Future<void> editTheme([NoteTheme? old]) async {
-    final result = await showDialog<NoteTheme>(context: context, builder: (_) => ThemeEditorDialog(theme: old, customFonts: availableFonts));
-    if (result == null) return;
+    final result = await showDialog<NoteTheme>(
+      context: context,
+      builder: (_) => ThemeEditorDialog(theme: old, customFonts: availableFonts),
+    );
+    if (result == null || !mounted) return;
     setState(() {
-      if (old == null) { items.add(result); }
-      else { final index = items.indexOf(old); if (index >= 0) items[index] = result; }
+      if (old == null) {
+        items.add(result);
+      } else {
+        final index = items.indexOf(old);
+        if (index >= 0) items[index] = result;
+      }
     });
   }
+
   Future<void> deleteTheme(NoteTheme theme) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -43,13 +69,92 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
         title: const Text('حذف تم؟'),
         content: Text('تم «${theme.name}» حذف شود؟'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('انصراف'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف'),
+          ),
         ],
       ),
     );
-    if (confirmed == true) setState(() => items.remove(theme));
+    if (confirmed == true && mounted) setState(() => items.remove(theme));
   }
+
+  Widget _fontCard(String family) {
+    final parts = family.replaceFirst('custom_', '').split('_');
+    if (parts.length > 1 && int.tryParse(parts.last) != null) {
+      parts.removeLast();
+    }
+    final displayName = family == 'Estedad' ? 'استعداد (Estedad)' : parts.join(' ');
+    final selected = selectedAppFont == family;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 9),
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: selected
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).dividerColor,
+          width: selected ? 1.8 : 1,
+        ),
+        color: selected
+            ? Theme.of(context).colorScheme.primary.withOpacity(.06)
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  displayName,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (selected)
+                const Icon(Icons.check_circle, color: Colors.green, size: 19),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: selected
+                    ? null
+                    : () async {
+                        setState(() => selectedAppFont = family);
+                        await widget.onAppFontChanged?.call(family);
+                      },
+                child: Text(selected ? 'انتخاب شده' : 'انتخاب فونت'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Text(
+            'نمونه فونت',
+            style: TextStyle(
+              fontFamily: family,
+              fontSize: 21,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'متن‌های برنامه، عنوان‌ها و دکمه‌ها با این فونت نمایش داده می‌شوند.',
+            style: TextStyle(
+              fontFamily: family,
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -59,145 +164,185 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
         content: SizedBox(
           width: 420,
           child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.text_fields, size: 20),
-                                SizedBox(width: 8),
-                                Text('فونت برنامه', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              ],
-                            ),
-                            const SizedBox(height: 5),
-                            const Text(
-                              'فونت دلخواهت را اضافه کن و برای نمایش نوشته‌های برنامه انتخابش کن.',
-                              style: TextStyle(fontSize: 12, color: Colors.black54),
-                            ),
-                            const SizedBox(height: 12),
-                            ...['Estedad', ...availableFonts].toSet().map((family) {
-                              final nameParts = family.replaceFirst('custom_', '').split('_');
-                              if (nameParts.length > 1 && int.tryParse(nameParts.last) != null) {
-                                nameParts.removeLast();
-                              }
-                              final displayName = family == 'Estedad'
-                                  ? 'استعداد (Estedad)'
-                                  : nameParts.join(' ');
-                              final selected = selectedAppFont == family;
-                              return Container(
-                                width: double.infinity,
-                                margin: const EdgeInsets.only(bottom: 9),
-                                padding: const EdgeInsets.all(11),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
-                                    width: selected ? 1.8 : 1,
-                                  ),
-                                  color: selected ? Theme.of(context).colorScheme.primary.withOpacity(.06) : null,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(child: Text(displayName, style: const TextStyle(fontWeight: FontWeight.w600))),
-                                        if (selected) const Icon(Icons.check_circle, color: Colors.green, size: 19),
-                                        const SizedBox(width: 8),
-                                        OutlinedButton(
-                                          onPressed: selected ? null : () async {
-                                            setState(() => selectedAppFont = family);
-                                            await widget.onAppFontChanged?.call(family);
-                                          },
-                                          child: Text(selected ? 'انتخاب شده' : 'انتخاب فونت'),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 7),
-                                    Text(
-                                      'نمونه فونت',
-                                      style: TextStyle(fontFamily: family, fontSize: 21, fontWeight: FontWeight.w600),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      'متن‌های برنامه، عنوان‌ها و دکمه‌ها با این فونت نمایش داده می‌شوند.',
-                                      style: TextStyle(fontFamily: family, fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                    if (items.isEmpty) const Padding(padding: EdgeInsets.all(12), child: Text('هنوز تمی نساخته‌ای.')),
-                    ...items.map((theme) => Card(
-                    color: Color(theme.backgroundColor),
-                    child: ListTile(
-                      title: Text(theme.name, style: TextStyle(color: Color(theme.textColor), fontFamily: theme.fontFamily)),
-                      subtitle: Text('پس‌زمینه، رنگ متن و فونت', style: TextStyle(color: Color(theme.textColor).withOpacity(.75))),
-                      leading: CircleAvatar(backgroundColor: Color(theme.backgroundColor), child: Icon(Icons.text_fields, color: Color(theme.textColor))),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(tooltip: 'ویرایش', onPressed: () => editTheme(theme), icon: const Icon(Icons.edit_outlined)),
-                        IconButton(tooltip: 'حذف', onPressed: () => deleteTheme(theme), icon: const Icon(Icons.delete_outline)),
-                      ]),
-                      onTap: () => editTheme(theme),
-                    ),
-                  )),
-                  ],
+            shrinkWrap: true,
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.text_fields, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'فونت برنامه',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      const Text(
+                        'فونت دلخواهت را اضافه کن و برای نمایش نوشته‌های برنامه انتخابش کن.',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                      const SizedBox(height: 12),
+                      ...['Estedad', ...availableFonts].toSet().map(_fontCard),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: addingFont || widget.onAddCustomFont == null
+                              ? null
+                              : addFont,
+                          icon: addingFont
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.add),
+                          label: Text(
+                            addingFont
+                                ? 'در حال افزودن فونت...'
+                                : 'افزودن فونت جدید (TTF / OTF)',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              ),
+              if (items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text('هنوز تمی نساخته‌ای.'),
+                ),
+              ...items.map(
+                (theme) => Card(
+                  color: Color(theme.backgroundColor),
+                  child: ListTile(
+                    title: Text(
+                      theme.name,
+                      style: TextStyle(
+                        color: Color(theme.textColor),
+                        fontFamily: theme.fontFamily,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'پس‌زمینه، رنگ متن و فونت',
+                      style: TextStyle(
+                        color: Color(theme.textColor).withOpacity(.75),
+                      ),
+                    ),
+                    leading: CircleAvatar(
+                      backgroundColor: Color(theme.backgroundColor),
+                      child: Icon(
+                        Icons.text_fields,
+                        color: Color(theme.textColor),
+                      ),
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'ویرایش',
+                          onPressed: () => editTheme(theme),
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                        IconButton(
+                          tooltip: 'حذف',
+                          onPressed: () => deleteTheme(theme),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ),
+                    onTap: () => editTheme(theme),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
-          TextButton.icon(onPressed: () => editTheme(), icon: const Icon(Icons.add), label: const Text('ساخت تم')),
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-          FilledButton(onPressed: () => Navigator.pop(context, items), child: const Text('ذخیره')),
+          TextButton.icon(
+            onPressed: () => editTheme(),
+            icon: const Icon(Icons.add),
+            label: const Text('ساخت تم'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('انصراف'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, items),
+            child: const Text('ذخیره'),
+          ),
         ],
       ),
     );
   }
 }
 
-class ThemeEditorDialog extends StatefulWidget{
+class ThemeEditorDialog extends StatefulWidget {
   final NoteTheme? theme;
   final List<String> customFonts;
-  const ThemeEditorDialog({super.key,this.theme,this.customFonts=const []});
+
+  const ThemeEditorDialog({
+    super.key,
+    this.theme,
+    this.customFonts = const [],
+  });
+
   @override
-  State<ThemeEditorDialog> createState()=>_ThemeEditorDialogState();
+  State<ThemeEditorDialog> createState() => _ThemeEditorDialogState();
 }
-class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
-  late final TextEditingController name,font;
-  late int background,textColor;
-  static const backgrounds=[
-    0xFFFFEBEE,0xFFFCE4EC,0xFFF3E5F5,0xFFEDE7F6,0xFFE8EAF6,
-    0xFFE3F2FD,0xFFE1F5FE,0xFFE0F7FA,0xFFE0F2F1,0xFFE8F5E9,
-    0xFFF1F8E9,0xFFF9FBE7,0xFFFFFDE7,0xFFFFF8E1,0xFFFFF3E0,
-    0xFFFFEAD5,0xFFFBE9E7,0xFFEFEBE9,0xFFECEFF1,0xFFE0E0E0,
-    0xFFCFD8DC,0xFFB3E5FC,0xFFB2DFDB,0xFFC8E6C9,0xFFDCEDC8,
-    0xFFFFF9C4,0xFFFFE0B2,0xFFFFCCBC,0xFFD7CCC8,0xFFD1C4E9,
+
+class _ThemeEditorDialogState extends State<ThemeEditorDialog> {
+  late final TextEditingController name;
+  late final TextEditingController font;
+  late int background;
+  late int textColor;
+
+  static const backgrounds = [
+    0xFFFFEBEE, 0xFFFCE4EC, 0xFFF3E5F5, 0xFFEDE7F6, 0xFFE8EAF6,
+    0xFFE3F2FD, 0xFFE1F5FE, 0xFFE0F7FA, 0xFFE0F2F1, 0xFFE8F5E9,
+    0xFFF1F8E9, 0xFFF9FBE7, 0xFFFFFDE7, 0xFFFFF8E1, 0xFFFFF3E0,
+    0xFFFFEAD5, 0xFFFBE9E7, 0xFFEFEBE9, 0xFFECEFF1, 0xFFE0E0E0,
+    0xFFCFD8DC, 0xFFB3E5FC, 0xFFB2DFDB, 0xFFC8E6C9, 0xFFDCEDC8,
+    0xFFFFF9C4, 0xFFFFE0B2, 0xFFFFCCBC, 0xFFD7CCC8, 0xFFD1C4E9,
   ];
-  static const textColors=[
-    0xFF16131C,0xFF000000,0xFF263238,0xFF37474F,0xFF1A237E,
-    0xFF0D47A1,0xFF006064,0xFF004D40,0xFF1B5E20,0xFF33691E,
-    0xFF827717,0xFF5D4037,0xFF4E342E,0xFF6D4C41,0xFF880E4F,
-    0xFFAD1457,0xFF6A1B9A,0xFF4527A0,0xFFB71C1C,0xFFFFFFFF,
+
+  static const textColors = [
+    0xFF16131C, 0xFF000000, 0xFF263238, 0xFF37474F, 0xFF1A237E,
+    0xFF0D47A1, 0xFF006064, 0xFF004D40, 0xFF1B5E20, 0xFF33691E,
+    0xFF827717, 0xFF5D4037, 0xFF4E342E, 0xFF6D4C41, 0xFF880E4F,
+    0xFFAD1457, 0xFF6A1B9A, 0xFF4527A0, 0xFFB71C1C, 0xFFFFFFFF,
   ];
-  static const commonFonts=['Estedad'];
+
+  static const commonFonts = ['Estedad'];
+
   @override
-  void initState(){
+  void initState() {
     super.initState();
-    final t=widget.theme;
-    name=TextEditingController(text:t?.name??'');
-    font=TextEditingController(text:t?.fontFamily??'Estedad');
-    background=t?.backgroundColor??backgrounds[3];
-    textColor=t?.textColor??textColors.first;
+    final theme = widget.theme;
+    name = TextEditingController(text: theme?.name ?? '');
+    font = TextEditingController(text: theme?.fontFamily ?? 'Estedad');
+    background = theme?.backgroundColor ?? backgrounds[3];
+    textColor = theme?.textColor ?? textColors.first;
   }
+
   void _setColorChannel(bool isBackground, int channel, double value) {
     final current = Color(isBackground ? background : textColor);
     final channels = [current.red, current.green, current.blue];
     channels[channel] = value.round().clamp(0, 255).toInt();
-    final updated = Color.fromARGB(255, channels[0], channels[1], channels[2]).value;
+    final updated = Color.fromARGB(
+      255,
+      channels[0],
+      channels[1],
+      channels[2],
+    ).value;
     setState(() {
       if (isBackground) {
         background = updated;
@@ -207,22 +352,38 @@ class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
     });
   }
 
-  Widget _colorChannelSlider(String label, int channel, int value, bool isBackground) {
+  Widget _colorChannelSlider(
+    String label,
+    int channel,
+    int value,
+    bool isBackground,
+  ) {
     return Row(
       children: [
-        SizedBox(width: 22, child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+        SizedBox(
+          width: 22,
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
         Expanded(
           child: Slider(
             min: 0,
             max: 255,
             divisions: 255,
             value: value.toDouble(),
-            onChanged: (next) => _setColorChannel(isBackground, channel, next),
+            onChanged: (next) =>
+                _setColorChannel(isBackground, channel, next),
           ),
         ),
         SizedBox(
           width: 34,
-          child: Text(value.toString(), textAlign: TextAlign.end, style: const TextStyle(fontSize: 11)),
+          child: Text(
+            value.toString(),
+            textAlign: TextAlign.end,
+            style: const TextStyle(fontSize: 11),
+          ),
         ),
       ],
     );
@@ -240,214 +401,210 @@ class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
   }
 
   @override
-  void dispose(){name.dispose();font.dispose();super.dispose();}
-  @override
-  Widget build(BuildContext context)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
-    title:Text(widget.theme==null?'ساخت تم جدید':'ویرایش تم'),
-    content:SingleChildScrollView(child:SizedBox(width:420,child:Column(
-      mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
-        TextField(controller:name,maxLength:24,decoration:const InputDecoration(labelText:'نام دلخواه تم',hintText:'مثلاً شب آرام')),
-        const SizedBox(height:12),const Text('۱. رنگ پس‌زمینه (۳۰ رنگ)'),
-        const SizedBox(height:8),
-        Wrap(spacing:9,runSpacing:9,children:backgrounds.map((c)=>GestureDetector(
-          onTap:()=>setState(()=>background=c),
-          child:Container(width:32,height:32,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:background==c?Colors.deepPurple:Colors.black26,width:background==c?3:1))),
-        )).toList()),
-        const SizedBox(height:8),
-        Row(children: [
-          const Expanded(child: Text('تنظیم دقیق رنگ پس‌زمینه', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-          Container(width:22,height:22,decoration:BoxDecoration(color:Color(background),shape:BoxShape.circle,border:Border.all(color:Colors.black26))),
-        ]),
-        _colorSliders(true),
-        const SizedBox(height:16),const Text('۲. رنگ متن'),
-        const SizedBox(height:8),
-        Wrap(spacing:9,runSpacing:9,children:textColors.map((c)=>GestureDetector(
-          onTap:()=>setState(()=>textColor=c),
-          child:Container(width:30,height:30,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:textColor==c?Colors.deepPurple:Colors.black26,width:textColor==c?3:1))),
-        )).toList()),
-        const SizedBox(height:8),
-        Row(children: [
-          const Expanded(child: Text('تنظیم دقیق رنگ متن', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-          Container(width:22,height:22,decoration:BoxDecoration(color:Color(textColor),shape:BoxShape.circle,border:Border.all(color:Colors.black26))),
-        ]),
-        _colorSliders(false),
-        const SizedBox(height:16),const Text('۳. فونت دلخواه'),
-        TextField(controller:font,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'نام فونت دستگاه یا فونت برنامه',hintText:'مثلاً sans-serif')),
-        const Text('برای نمایش دقیق، فونت باید روی دستگاه موجود یا به برنامه اضافه شده باشد.',style:TextStyle(fontSize:11,color:Colors.black54)),
-        const SizedBox(height:6),
-        Wrap(spacing:6,children:[...commonFonts,...widget.customFonts].map((f)=>ActionChip(label:Text(f,style:TextStyle(fontFamily:f,fontSize:11)),onPressed:()=>setState(()=>font.text=f))).toList()),
-        const SizedBox(height:16),const Text('پیش‌نمایش'),
-        Container(width:double.infinity,padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:Color(background),borderRadius:BorderRadius.circular(12)),child:Text('یادداشت نمونه؛ این متن با فونت و رنگ انتخابی نمایش داده می‌شود.',style:TextStyle(color:Color(textColor),fontFamily:font.text.trim().isEmpty?'Estedad':font.text.trim(),fontSize:16))),
-      ],
-    ))),
-    actions:[
-      TextButton(onPressed:()=>Navigator.pop(context),child:const Text('انصراف')),
-      FilledButton(onPressed:()=>Navigator.pop(context,NoteTheme(name.text.trim().isEmpty?'تم بدون نام':name.text.trim(),background,textColor,font.text.trim().isEmpty?'sans-serif':font.text.trim())),child:const Text('ذخیره تم')),
-    ],
-  ));
-}
+  void dispose() {
+    name.dispose();
+    font.dispose();
+    super.dispose();
+  }
 
-), '').replaceAll('_', ' ');
-                              final selected = selectedAppFont == family;
-                              return Container(
-                                width: double.infinity,
-                                margin: const EdgeInsets.only(bottom: 9),
-                                padding: const EdgeInsets.all(11),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
-                                    width: selected ? 1.8 : 1,
-                                  ),
-                                  color: selected ? Theme.of(context).colorScheme.primary.withOpacity(.06) : null,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(child: Text(displayName, style: const TextStyle(fontWeight: FontWeight.w600))),
-                                        if (selected) const Icon(Icons.check_circle, color: Colors.green, size: 19),
-                                        const SizedBox(width: 8),
-                                        OutlinedButton(
-                                          onPressed: selected ? null : () async {
-                                            setState(() => selectedAppFont = family);
-                                            await widget.onAppFontChanged?.call(family);
-                                          },
-                                          child: Text(selected ? 'انتخاب شده' : 'انتخاب فونت'),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 7),
-                                    Text(
-                                      'نمونه فونت',
-                                      style: TextStyle(fontFamily: family, fontSize: 21, fontWeight: FontWeight.w600),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      'متن‌های برنامه، عنوان‌ها و دکمه‌ها با این فونت نمایش داده می‌شوند.',
-                                      style: TextStyle(fontFamily: family, fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                            const SizedBox(height: 4),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: addingFont ? null : addFont,
-                                icon: addingFont
-                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                    : const Icon(Icons.add),
-                                label: Text(addingFont ? 'در حال افزودن فونت...' : 'افزودن فونت جدید (TTF / OTF)'),
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: AlertDialog(
+        title: Text(widget.theme == null ? 'ساخت تم جدید' : 'ویرایش تم'),
+        content: SingleChildScrollView(
+          child: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: name,
+                  maxLength: 24,
+                  decoration: const InputDecoration(
+                    labelText: 'نام دلخواه تم',
+                    hintText: 'مثلاً شب آرام',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text('۱. رنگ پس‌زمینه (۳۰ رنگ)'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 9,
+                  runSpacing: 9,
+                  children: backgrounds
+                      .map(
+                        (color) => GestureDetector(
+                          onTap: () => setState(() => background = color),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Color(color),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: background == color
+                                    ? Colors.deepPurple
+                                    : Colors.black26,
+                                width: background == color ? 3 : 1,
                               ),
                             ),
-                          ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'تنظیم دقیق رنگ پس‌زمینه',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                    if (items.isEmpty) const Padding(padding: EdgeInsets.all(12), child: Text('هنوز تمی نساخته‌ای.')),
-                    ...items.map((theme) => Card(
-                    color: Color(theme.backgroundColor),
-                    child: ListTile(
-                      title: Text(theme.name, style: TextStyle(color: Color(theme.textColor), fontFamily: theme.fontFamily)),
-                      subtitle: Text('پس‌زمینه، رنگ متن و فونت', style: TextStyle(color: Color(theme.textColor).withOpacity(.75))),
-                      leading: CircleAvatar(backgroundColor: Color(theme.backgroundColor), child: Icon(Icons.text_fields, color: Color(theme.textColor))),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(tooltip: 'ویرایش', onPressed: () => editTheme(theme), icon: const Icon(Icons.edit_outlined)),
-                        IconButton(tooltip: 'حذف', onPressed: () => deleteTheme(theme), icon: const Icon(Icons.delete_outline)),
-                      ]),
-                      onTap: () => editTheme(theme),
+                    Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: Color(background),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.black26),
+                      ),
                     ),
-                  )),
                   ],
                 ),
+                _colorSliders(true),
+                const SizedBox(height: 16),
+                const Text('۲. رنگ متن'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 9,
+                  runSpacing: 9,
+                  children: textColors
+                      .map(
+                        (color) => GestureDetector(
+                          onTap: () => setState(() => textColor = color),
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: Color(color),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: textColor == color
+                                    ? Colors.deepPurple
+                                    : Colors.black26,
+                                width: textColor == color ? 3 : 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'تنظیم دقیق رنگ متن',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: Color(textColor),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.black26),
+                      ),
+                    ),
+                  ],
+                ),
+                _colorSliders(false),
+                const SizedBox(height: 16),
+                const Text('۳. فونت دلخواه'),
+                TextField(
+                  controller: font,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'نام فونت دستگاه یا فونت برنامه',
+                    hintText: 'مثلاً sans-serif',
+                  ),
+                ),
+                const Text(
+                  'برای نمایش دقیق، فونت باید روی دستگاه موجود یا به برنامه اضافه شده باشد.',
+                  style: TextStyle(fontSize: 11, color: Colors.black54),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  children: [...commonFonts, ...widget.customFonts]
+                      .toSet()
+                      .map(
+                        (family) => ActionChip(
+                          label: Text(
+                            family,
+                            style: TextStyle(fontFamily: family, fontSize: 11),
+                          ),
+                          onPressed: () => setState(() => font.text = family),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 16),
+                const Text('پیش‌نمایش'),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Color(background),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'یادداشت نمونه؛ این متن با فونت و رنگ انتخابی نمایش داده می‌شود.',
+                    style: TextStyle(
+                      color: Color(textColor),
+                      fontFamily: font.text.trim().isEmpty
+                          ? 'Estedad'
+                          : font.text.trim(),
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         actions: [
-          TextButton.icon(
-            onPressed: addingFont ? null : addFont,
-            icon: addingFont
-                ? const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2))
-                : const Icon(Icons.upload_file_outlined),
-            label: Text(addingFont ? 'در حال افزودن...' : 'افزودن فونت'),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('انصراف'),
           ),
-          TextButton.icon(onPressed: () => editTheme(), icon: const Icon(Icons.add), label: const Text('ساخت تم')),
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-          FilledButton(onPressed: () => Navigator.pop(context, items), child: const Text('ذخیره')),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              context,
+              NoteTheme(
+                name.text.trim().isEmpty ? 'تم بدون نام' : name.text.trim(),
+                background,
+                textColor,
+                font.text.trim().isEmpty ? 'sans-serif' : font.text.trim(),
+              ),
+            ),
+            child: const Text('ذخیره تم'),
+          ),
         ],
       ),
     );
   }
 }
-
-class ThemeEditorDialog extends StatefulWidget{
-  final NoteTheme? theme;
-  final List<String> customFonts;
-  const ThemeEditorDialog({super.key,this.theme,this.customFonts=const []});
-  @override
-  State<ThemeEditorDialog> createState()=>_ThemeEditorDialogState();
-}
-class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
-  late final TextEditingController name,font;
-  late int background,textColor;
-  static const backgrounds=[
-    0xFFFFEBEE,0xFFFCE4EC,0xFFF3E5F5,0xFFEDE7F6,0xFFE8EAF6,
-    0xFFE3F2FD,0xFFE1F5FE,0xFFE0F7FA,0xFFE0F2F1,0xFFE8F5E9,
-    0xFFF1F8E9,0xFFF9FBE7,0xFFFFFDE7,0xFFFFF8E1,0xFFFFF3E0,
-    0xFFFFEAD5,0xFFFBE9E7,0xFFEFEBE9,0xFFECEFF1,0xFFE0E0E0,
-    0xFFCFD8DC,0xFFB3E5FC,0xFFB2DFDB,0xFFC8E6C9,0xFFDCEDC8,
-    0xFFFFF9C4,0xFFFFE0B2,0xFFFFCCBC,0xFFD7CCC8,0xFFD1C4E9,
-  ];
-  static const textColors=[
-    0xFF16131C,0xFF000000,0xFF263238,0xFF37474F,0xFF1A237E,
-    0xFF0D47A1,0xFF006064,0xFF004D40,0xFF1B5E20,0xFF33691E,
-    0xFF827717,0xFF5D4037,0xFF4E342E,0xFF6D4C41,0xFF880E4F,
-    0xFFAD1457,0xFF6A1B9A,0xFF4527A0,0xFFB71C1C,0xFFFFFFFF,
-  ];
-  static const commonFonts=['Estedad'];
-  @override
-  void initState(){
-    super.initState();
-    final t=widget.theme;
-    name=TextEditingController(text:t?.name??'');
-    font=TextEditingController(text:t?.fontFamily??'Estedad');
-    background=t?.backgroundColor??backgrounds[3];
-    textColor=t?.textColor??textColors.first;
-  }
-  @override
-  void dispose(){name.dispose();font.dispose();super.dispose();}
-  @override
-  Widget build(BuildContext context)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
-    title:Text(widget.theme==null?'ساخت تم جدید':'ویرایش تم'),
-    content:SingleChildScrollView(child:SizedBox(width:420,child:Column(
-      mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
-        TextField(controller:name,maxLength:24,decoration:const InputDecoration(labelText:'نام دلخواه تم',hintText:'مثلاً شب آرام')),
-        const SizedBox(height:12),const Text('۱. رنگ پس‌زمینه (۳۰ رنگ)'),
-        const SizedBox(height:8),
-        Wrap(spacing:9,runSpacing:9,children:backgrounds.map((c)=>GestureDetector(
-          onTap:()=>setState(()=>background=c),
-          child:Container(width:32,height:32,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:background==c?Colors.deepPurple:Colors.black26,width:background==c?3:1))),
-        )).toList()),
-        const SizedBox(height:16),const Text('۲. رنگ متن'),
-        const SizedBox(height:8),
-        Wrap(spacing:9,runSpacing:9,children:textColors.map((c)=>GestureDetector(
-          onTap:()=>setState(()=>textColor=c),
-          child:Container(width:30,height:30,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:textColor==c?Colors.deepPurple:Colors.black26,width:textColor==c?3:1))),
-        )).toList()),
-        const SizedBox(height:16),const Text('۳. فونت دلخواه'),
-        TextField(controller:font,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'نام فونت دستگاه یا فونت برنامه',hintText:'مثلاً sans-serif')),
-        const Text('برای نمایش دقیق، فونت باید روی دستگاه موجود یا به برنامه اضافه شده باشد.',style:TextStyle(fontSize:11,color:Colors.black54)),
-        const SizedBox(height:6),
-        Wrap(spacing:6,children:[...commonFonts,...widget.customFonts].map((f)=>ActionChip(label:Text(f,style:TextStyle(fontFamily:f,fontSize:11)),onPressed:()=>setState(()=>font.text=f))).toList()),
-        const SizedBox(height:16),const Text('پیش‌نمایش'),
-        Container(width:double.infinity,padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:Color(background),borderRadius:BorderRadius.circular(12)),child:Text('یادداشت نمونه؛ این متن با فونت و رنگ انتخابی نمایش داده می‌شود.',style:TextStyle(color:Color(textColor),fontFamily:font.text.trim().isEmpty?'Estedad':font.text.trim(),fontSize:16))),
-      ],
-    ))),
-    actions:[
-      TextButton(onPressed:()=>Navigator.pop(context),child:const Text('انصراف')),
-      FilledButton(onPressed:()=>Navigator.pop(context,NoteTheme(name.text.trim().isEmpty?'تم بدون نام':name.text.trim(),background,textColor,font.text.trim().isEmpty?'sans-serif':font.text.trim())),child:const Text('ذخیره تم')),
-    ],
-  ));
-}
-
