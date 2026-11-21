@@ -193,6 +193,52 @@ class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
     background=t?.backgroundColor??backgrounds[3];
     textColor=t?.textColor??textColors.first;
   }
+  void _setColorChannel(bool isBackground, int channel, double value) {
+    final current = Color(isBackground ? background : textColor);
+    final channels = [current.red, current.green, current.blue];
+    channels[channel] = value.round().clamp(0, 255);
+    final updated = Color.fromARGB(255, channels[0], channels[1], channels[2]).value;
+    setState(() {
+      if (isBackground) {
+        background = updated;
+      } else {
+        textColor = updated;
+      }
+    });
+  }
+
+  Widget _colorChannelSlider(String label, int channel, int value, bool isBackground) {
+    return Row(
+      children: [
+        SizedBox(width: 22, child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+        Expanded(
+          child: Slider(
+            min: 0,
+            max: 255,
+            divisions: 255,
+            value: value.toDouble(),
+            onChanged: (next) => _setColorChannel(isBackground, channel, next),
+          ),
+        ),
+        SizedBox(
+          width: 34,
+          child: Text(value.toString(), textAlign: TextAlign.end, style: const TextStyle(fontSize: 11)),
+        ),
+      ],
+    );
+  }
+
+  Widget _colorSliders(bool isBackground) {
+    final color = Color(isBackground ? background : textColor);
+    return Column(
+      children: [
+        _colorChannelSlider('R', 0, color.red, isBackground),
+        _colorChannelSlider('G', 1, color.green, isBackground),
+        _colorChannelSlider('B', 2, color.blue, isBackground),
+      ],
+    );
+  }
+
   @override
   void dispose(){name.dispose();font.dispose();super.dispose();}
   @override
@@ -207,12 +253,24 @@ class _ThemeEditorDialogState extends State<ThemeEditorDialog>{
           onTap:()=>setState(()=>background=c),
           child:Container(width:32,height:32,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:background==c?Colors.deepPurple:Colors.black26,width:background==c?3:1))),
         )).toList()),
+        const SizedBox(height:8),
+        Row(children: [
+          const Expanded(child: Text('تنظیم دقیق رنگ پس‌زمینه', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+          Container(width:22,height:22,decoration:BoxDecoration(color:Color(background),shape:BoxShape.circle,border:Border.all(color:Colors.black26))),
+        ]),
+        _colorSliders(true),
         const SizedBox(height:16),const Text('۲. رنگ متن'),
         const SizedBox(height:8),
         Wrap(spacing:9,runSpacing:9,children:textColors.map((c)=>GestureDetector(
           onTap:()=>setState(()=>textColor=c),
           child:Container(width:30,height:30,decoration:BoxDecoration(color:Color(c),shape:BoxShape.circle,border:Border.all(color:textColor==c?Colors.deepPurple:Colors.black26,width:textColor==c?3:1))),
         )).toList()),
+        const SizedBox(height:8),
+        Row(children: [
+          const Expanded(child: Text('تنظیم دقیق رنگ متن', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+          Container(width:22,height:22,decoration:BoxDecoration(color:Color(textColor),shape:BoxShape.circle,border:Border.all(color:Colors.black26))),
+        ]),
+        _colorSliders(false),
         const SizedBox(height:16),const Text('۳. فونت دلخواه'),
         TextField(controller:font,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'نام فونت دستگاه یا فونت برنامه',hintText:'مثلاً sans-serif')),
         const Text('برای نمایش دقیق، فونت باید روی دستگاه موجود یا به برنامه اضافه شده باشد.',style:TextStyle(fontSize:11,color:Colors.black54)),
