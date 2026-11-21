@@ -69,26 +69,64 @@ String _notePlainText(String body) {
 }
 
 void main() => runApp(const NotebookApp());
-class NotebookApp extends StatelessWidget {
+class NotebookApp extends StatefulWidget {
   const NotebookApp({super.key});
   @override
+  State<NotebookApp> createState() => _NotebookAppState();
+}
+
+class _NotebookAppState extends State<NotebookApp> {
+  String appFontFamily = 'sans-serif';
+  final NotebookRepository repository = NotebookRepository();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppFont();
+  }
+
+  Future<void> _loadAppFont() async {
+    final saved = await repository.loadAppFont();
+    if (!mounted || saved == null || saved.isEmpty) return;
+    setState(() => appFontFamily = saved);
+  }
+
+  Future<void> _setAppFont(String family) async {
+    final normalized = family.trim().isEmpty ? 'sans-serif' : family.trim();
+    setState(() => appFontFamily = normalized);
+    await repository.saveAppFont(normalized);
+  }
+
+  @override
   Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false, title: 'دفترچه ترید',
-    theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6956A5)), scaffoldBackgroundColor: const Color(0xFFF7F5FB)),
-    localizationsDelegates: const [GlobalMaterialLocalizations.delegate, GlobalCupertinoLocalizations.delegate, GlobalWidgetsLocalizations.delegate, quill.FlutterQuillLocalizations.delegate],
+    debugShowCheckedModeBanner: false,
+    title: 'دفترچه ترید',
+    theme: ThemeData(
+      useMaterial3: true,
+      fontFamily: appFontFamily,
+      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6956A5)),
+      scaffoldBackgroundColor: const Color(0xFFF7F5FB),
+    ),
+    localizationsDelegates: const [
+      GlobalMaterialLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      quill.FlutterQuillLocalizations.delegate,
+    ],
     supportedLocales: const [Locale('fa'), Locale('en')],
-    home: const NotesPage(),
+    home: NotesPage(
+      appFontFamily: appFontFamily,
+      onAppFontChanged: _setAppFont,
+    ),
   );
 }
 
-
-
-
-
-
+Future<void> _ignoreAppFontChange(String _) async {}
 
 class NotesPage extends StatefulWidget {
-  const NotesPage({super.key});
+  final String appFontFamily;
+  final Future<void> Function(String) onAppFontChanged;
+  const NotesPage({super.key, this.appFontFamily = 'sans-serif', this.onAppFontChanged = _ignoreAppFontChange});
   @override
   State<NotesPage> createState() => _NotesPageState();
 }
@@ -169,6 +207,8 @@ class _NotesPageState extends State<NotesPage> {
     final result=await showDialog<List<NoteTheme>>(context:context,builder:(context)=>ThemeManagerDialog(
       initialThemes:List.of(themes),
       customFonts:customFonts.keys.toList(),
+      appFontFamily:widget.appFontFamily,
+      onAppFontChanged:widget.onAppFontChanged,
       onAddCustomFont:() async {
         await addCustomFont();
         return customFonts.keys.toList();
