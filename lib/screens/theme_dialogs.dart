@@ -88,7 +88,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
     if (parts.length > 1 && int.tryParse(parts.last) != null) {
       parts.removeLast();
     }
-    final displayName = family == 'Estedad' ? 'استعداد (Estedad)' : parts.join(' ');
+    final displayName = family == 'system-default' ? 'فونت گوشی (پیش‌فرض سیستم)' : family == 'Estedad' ? 'استعداد (Estedad)' : parts.join(' ');
     final selected = selectedAppFont == family;
 
     return Container(
@@ -136,7 +136,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
           Text(
             'نمونه فونت',
             style: TextStyle(
-              fontFamily: family,
+              fontFamily: family == 'system-default' ? null : family,
               fontSize: 21,
               fontWeight: FontWeight.w600,
             ),
@@ -145,7 +145,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
           Text(
             'متن‌های برنامه، عنوان‌ها و دکمه‌ها با این فونت نمایش داده می‌شوند.',
             style: TextStyle(
-              fontFamily: family,
+              fontFamily: family == 'system-default' ? null : family,
               fontSize: 13,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -184,11 +184,11 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
                       ),
                       const SizedBox(height: 5),
                       const Text(
-                        'فونت دلخواهت را اضافه کن و برای نمایش نوشته‌های برنامه انتخابش کن.',
+                        'فونت پیش‌فرض گوشی یا فونت دلخواهت را برای نوشته‌های برنامه انتخاب کن.',
                         style: TextStyle(fontSize: 12, color: Colors.black54),
                       ),
                       const SizedBox(height: 12),
-                      ...['Estedad', ...availableFonts].toSet().map(_fontCard),
+                      ...['system-default', 'Estedad', ...availableFonts].toSet().map(_fontCard),
                       const SizedBox(height: 4),
                       SizedBox(
                         width: double.infinity,
