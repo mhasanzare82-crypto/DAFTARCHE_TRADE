@@ -1,6 +1,10 @@
 allprojects {
     repositories {
         google()
+        // Fallback mirror for Maven Central artifacts when the primary host is rate-limited.
+        maven {
+            url = uri("https://maven-central.storage-download.googleapis.com/maven2")
+        }
         mavenCentral()
     }
 }
