@@ -435,14 +435,14 @@ class _NotesPageState extends State<NotesPage> {
 
   Future<Note?> _noteFromDocx(PlatformFile file) async {
     final bytes = await file.readAsBytes();
-    final zip = ZipDecoder().decodeBytes(bytes);
+    final zip = ZipDecoder().decodeBytes(bytes, verify: true, throwOnError: true);
     final documentFile = zip.findFile('word/document.xml');
     if (documentFile == null) return null;
-    final xml = XmlDocument.parse(utf8.decode(documentFile.content as List<int>));
+    final xml = XmlDocument.parse(utf8.decode(documentFile.readBytes() ?? Uint8List(0), allowMalformed: true));
     final relsFile = zip.findFile('word/_rels/document.xml.rels');
     final relationships = <String, String>{};
     if (relsFile != null) {
-      final rels = XmlDocument.parse(utf8.decode(relsFile.content as List<int>));
+      final rels = XmlDocument.parse(utf8.decode(relsFile.readBytes() ?? Uint8List(0), allowMalformed: true));
       for (final rel in rels.descendants.whereType<XmlElement>().where((e) => e.name.local == 'Relationship')) {
         final id = rel.attributes.where((a) => a.name.local == 'Id').map((a) => a.value).firstOrNull;
         final target = rel.attributes.where((a) => a.name.local == 'Target').map((a) => a.value).firstOrNull;
@@ -452,7 +452,7 @@ class _NotesPageState extends State<NotesPage> {
     final numberingFormats = <String, String>{};
     final numberingFile = zip.findFile('word/numbering.xml');
     if (numberingFile != null) {
-      final numberingXml = XmlDocument.parse(utf8.decode(numberingFile.content as List<int>));
+      final numberingXml = XmlDocument.parse(utf8.decode(numberingFile.readBytes() ?? Uint8List(0), allowMalformed: true));
       final abstractFormats = <String, String>{};
       for (final item in numberingXml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'abstractNum')) {
         final abstractId = item.attributes.where((a) => a.name.local == 'abstractNumId').map((a) => a.value).firstOrNull;
@@ -514,13 +514,19 @@ class _NotesPageState extends State<NotesPage> {
           final rid = blip.attributes.where((a) => a.name.local == 'embed').map((a) => a.value).firstOrNull;
           final target = rid == null ? null : relationships[rid];
           if (target == null) continue;
-          final mediaPath = target.startsWith('/') ? target.substring(1) : target.startsWith('../') ? 'word/${target.substring(3)}' : 'word/$target';
-          final normalized = mediaPath;
-          final mediaFile = zip.findFile(normalized) ?? zip.findFile(mediaPath);
+          final resolved = Uri.parse('word/document.xml').resolve(target).path;
+          final normalized = resolved.replaceAll('\\', '/').split('/').fold<String>((acc, part) {
+            if (part.isEmpty || part == '.') return acc;
+            if (part == '..') return acc.contains('/') ? acc.substring(0, acc.lastIndexOf('/')) : '';
+            return acc.isEmpty ? part : '$acc/$part';
+          }, '');
+          final mediaFile = zip.findFile(normalized);
           if (mediaFile == null) continue;
           final ext = normalized.contains('.') ? normalized.substring(normalized.lastIndexOf('.')) : '.png';
           final path = '${imageDir.path}/imported_${DateTime.now().microsecondsSinceEpoch}_${imagePaths.length}$ext';
-          await File(path).writeAsBytes(mediaFile.content as List<int>);
+          final imageBytes = mediaFile.readBytes();
+          if (imageBytes == null || imageBytes.isEmpty) continue;
+          await File(path).writeAsBytes(imageBytes);
           imagePaths.add(path);
           operations.add({'insert': {'image': path}});
         }
