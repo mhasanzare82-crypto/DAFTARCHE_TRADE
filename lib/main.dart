@@ -357,11 +357,11 @@ class _NotesPageState extends State<NotesPage> {
     final zip = ZipDecoder().decodeBytes(bytes, verify: true, throwOnError: true);
     final documentFile = zip.findFile('word/document.xml');
     if (documentFile == null) return null;
-    final xml = XmlDocument.parse(utf8.decode(documentFile.readBytes(), allowMalformed: true));
+    final xml = XmlDocument.parse(utf8.decode(documentFile.readBytes() ?? Uint8List(0), allowMalformed: true));
     final relsFile = zip.findFile('word/_rels/document.xml.rels');
     final relationships = <String, String>{};
     if (relsFile != null) {
-      final rels = XmlDocument.parse(utf8.decode(relsFile.readBytes(), allowMalformed: true));
+      final rels = XmlDocument.parse(utf8.decode(relsFile.readBytes() ?? Uint8List(0), allowMalformed: true));
       for (final rel in rels.descendants.whereType<XmlElement>().where((e) => e.name.local == 'Relationship')) {
         final id = rel.attributes.where((a) => a.name.local == 'Id').map((a) => a.value).firstOrNull;
         final target = rel.attributes.where((a) => a.name.local == 'Target').map((a) => a.value).firstOrNull;
@@ -371,7 +371,7 @@ class _NotesPageState extends State<NotesPage> {
     final numberingFormats = <String, String>{};
     final numberingFile = zip.findFile('word/numbering.xml');
     if (numberingFile != null) {
-      final numberingXml = XmlDocument.parse(utf8.decode(numberingFile.readBytes(), allowMalformed: true));
+      final numberingXml = XmlDocument.parse(utf8.decode(numberingFile.readBytes() ?? Uint8List(0), allowMalformed: true));
       final abstractFormats = <String, String>{};
       for (final item in numberingXml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'abstractNum')) {
         final abstractId = item.attributes.where((a) => a.name.local == 'abstractNumId').map((a) => a.value).firstOrNull;
@@ -463,7 +463,7 @@ class _NotesPageState extends State<NotesPage> {
           final ext = normalized.contains('.') ? normalized.substring(normalized.lastIndexOf('.')) : '.png';
           final path = '${imageDir.path}/imported_${DateTime.now().microsecondsSinceEpoch}_${imagePaths.length}$ext';
           final imageBytes = mediaFile.readBytes();
-          if (imageBytes.isEmpty) continue;
+          if (imageBytes == null || imageBytes.isEmpty) continue;
           await File(path).writeAsBytes(imageBytes, flush: true);
           imagePaths.add(path);
           operations.add({'insert': {'image': path}});
