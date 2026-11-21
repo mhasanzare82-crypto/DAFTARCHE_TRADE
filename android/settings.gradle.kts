@@ -11,6 +11,10 @@ pluginManagement {
 
     repositories {
         google()
+        // Use Google's Maven Central mirror first to reduce rate-limit failures.
+        maven {
+            url = uri("https://maven-central.storage-download.googleapis.com/maven2")
+        }
         mavenCentral()
         gradlePluginPortal()
     }
