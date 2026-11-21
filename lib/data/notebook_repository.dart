@@ -37,6 +37,48 @@ class NotebookRepository {
     if (!success) throw StateError('Unable to persist app font family');
   }
 
+
+  static const _randomThemesKey = 'notebook_random_theme_names';
+  static const _textColorPaletteKey = 'notebook_text_color_palette';
+  static const _appThemeKey = 'notebook_app_theme';
+
+  Future<List<String>> loadRandomThemeNames() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_randomThemesKey) ?? <String>[];
+  }
+
+  Future<void> saveRandomThemeNames(List<String> values) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setStringList(_randomThemesKey, values)) {
+      throw StateError('Unable to persist random theme selection');
+    }
+  }
+
+  Future<List<int>> loadTextColorPalette() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_textColorPaletteKey) ?? <String>[])
+        .map(int.tryParse).whereType<int>().toList();
+  }
+
+  Future<void> saveTextColorPalette(List<int> values) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setStringList(_textColorPaletteKey, values.map((v) => v.toString()).toList())) {
+      throw StateError('Unable to persist text color palette');
+    }
+  }
+
+  Future<String> loadAppTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_appThemeKey) ?? 'دودی';
+  }
+
+  Future<void> saveAppTheme(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString(_appThemeKey, value)) {
+      throw StateError('Unable to persist app theme');
+    }
+  }
+
   Future<Map<String, String>> loadCustomFonts() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_fontsKey);
