@@ -102,13 +102,6 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
                 ),
         ),
         actions: [
-          TextButton.icon(
-            onPressed: addingFont ? null : addFont,
-            icon: addingFont
-                ? const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2))
-                : const Icon(Icons.upload_file_outlined),
-            label: Text(addingFont ? 'در حال افزودن...' : 'افزودن فونت'),
-          ),
           TextButton.icon(onPressed: () => editTheme(), icon: const Icon(Icons.add), label: const Text('ساخت تم')),
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
           FilledButton(onPressed: () => Navigator.pop(context, items), child: const Text('ذخیره')),
