@@ -81,9 +81,57 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
                             ),
                             const SizedBox(height: 12),
                             ...['Estedad', ...availableFonts].toSet().map((family) {
+                              final nameParts = family.replaceFirst('custom_', '').split('_');
+                              if (nameParts.length > 1 && int.tryParse(nameParts.last) != null) {
+                                nameParts.removeLast();
+                              }
                               final displayName = family == 'Estedad'
                                   ? 'استعداد (Estedad)'
-                                  : family.replaceFirst(RegExp(r'^custom_'), '').replaceFirst(RegExp(r'_\\d+
+                                  : nameParts.join(' ');
+                              final selected = selectedAppFont == family;
+                              return Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 9),
+                                padding: const EdgeInsets.all(11),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
+                                    width: selected ? 1.8 : 1,
+                                  ),
+                                  color: selected ? Theme.of(context).colorScheme.primary.withOpacity(.06) : null,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(child: Text(displayName, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                        if (selected) const Icon(Icons.check_circle, color: Colors.green, size: 19),
+                                        const SizedBox(width: 8),
+                                        OutlinedButton(
+                                          onPressed: selected ? null : () async {
+                                            setState(() => selectedAppFont = family);
+                                            await widget.onAppFontChanged?.call(family);
+                                          },
+                                          child: Text(selected ? 'انتخاب شده' : 'انتخاب فونت'),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 7),
+                                    Text(
+                                      'نمونه فونت',
+                                      style: TextStyle(fontFamily: family, fontSize: 21, fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'متن‌های برنامه، عنوان‌ها و دکمه‌ها با این فونت نمایش داده می‌شوند.',
+                                      style: TextStyle(fontFamily: family, fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
                     if (items.isEmpty) const Padding(padding: EdgeInsets.all(12), child: Text('هنوز تمی نساخته‌ای.')),
                     ...items.map((theme) => Card(
                     color: Color(theme.backgroundColor),
