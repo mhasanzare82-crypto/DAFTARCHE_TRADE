@@ -9,6 +9,7 @@ class NotebookRepository {
   static const _themesKey = 'notebook_themes';
   static const _foldersKey = 'notebook_folders';
   static const _fontsKey = 'notebook_custom_fonts';
+  static const _appFontKey = 'notebook_app_font_family';
 
   Future<List<Note>> loadNotes() async {
     final prefs = await SharedPreferences.getInstance();
@@ -23,6 +24,17 @@ class NotebookRepository {
   Future<List<NoteFolder>> loadFolders() async {
     final prefs = await SharedPreferences.getInstance();
     return _decodeList(prefs.getString(_foldersKey), NoteFolder.fromJson);
+  }
+
+  Future<String?> loadAppFont() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_appFontKey);
+  }
+
+  Future<void> saveAppFont(String family) async {
+    final prefs = await SharedPreferences.getInstance();
+    final success = await prefs.setString(_appFontKey, family);
+    if (!success) throw StateError('Unable to persist app font family');
   }
 
   Future<Map<String, String>> loadCustomFonts() async {
