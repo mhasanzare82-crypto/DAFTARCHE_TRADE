@@ -1255,12 +1255,16 @@ class _EditorPageState extends State<EditorPage> {
     editorDefaultFont = await repository.loadEditorFont();
     editorDefaultSize = await repository.loadEditorFontSize();
     if (!mounted) return;
-    if (widget.note == null && controller.document.length > 1) {
-      controller.formatText(0, controller.document.length - 1,
-          quill.Attribute.fromKeyValue('font', editorDefaultFont));
-      controller.formatText(0, controller.document.length - 1,
-          quill.Attribute.fromKeyValue('size', editorDefaultSize.toString()));
-      themeFontFamily = editorDefaultFont;
+    if (widget.note == null) {
+      // A new note inherits its font from the selected note theme, not the
+      // editor's last-used formatting preference.
+      final themeFont = quill.Attribute.fromKeyValue('font', themeFontFamily);
+      controller.formatSelection(themeFont);
+      if (controller.document.length > 1) {
+        controller.formatText(0, controller.document.length - 1, themeFont);
+        controller.formatText(0, controller.document.length - 1,
+            quill.Attribute.fromKeyValue('size', editorDefaultSize.toString()));
+      }
     }
     controller.addListener(_rememberEditorFormatting);
     setState(() {});
@@ -1423,6 +1427,14 @@ class _EditorPageState extends State<EditorPage> {
       themeColor = selected.backgroundColor;
       themeTextColor = selected.textColor;
       themeFontFamily = selected.fontFamily;
+      // Apply the selected theme font to existing text and to the insertion
+      // style, so typing immediately uses the theme font as well.
+      final fontAttribute =
+          quill.Attribute.fromKeyValue('font', themeFontFamily);
+      if (controller.document.length > 1) {
+        controller.formatText(0, controller.document.length - 1, fontAttribute);
+      }
+      controller.formatSelection(fontAttribute);
     });
   }
 
