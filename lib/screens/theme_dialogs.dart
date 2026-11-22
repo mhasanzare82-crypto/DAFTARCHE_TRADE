@@ -142,7 +142,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
     }
     setState(() {
       final name = 'رنگ ${items.length + 1}';
-      items.add(NoteTheme(name, value, readableText(selectedColor).toARGB32(), 'sans-serif'));
+      items.add(NoteTheme(name, value, readableText(selectedColor).toARGB32(), 'Estedad'));
       randomThemeNames.add(name);
     });
   }
@@ -604,7 +604,7 @@ class _ThemeEditorDialogState extends State<ThemeEditorDialog> {
                 name.text.trim().isEmpty ? 'تم بدون نام' : name.text.trim(),
                 background,
                 textColor,
-                font.text.trim().isEmpty ? 'sans-serif' : font.text.trim(),
+                font.text.trim().isEmpty ? 'Estedad' : font.text.trim(),
               ),
             ),
             child: const Text('ذخیره تم'),
