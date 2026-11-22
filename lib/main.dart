@@ -119,10 +119,9 @@ class _NotebookAppState extends State<NotebookApp> {
   Future<void> _loadAppFont() async {
     final saved = await repository.loadAppFont();
     if (!mounted) return;
-    // The application interface now uses Estedad exclusively.
-    const selected = 'Estedad';
+    final selected = saved ?? 'Estedad';
     setState(() => appFontFamily = selected);
-    if (saved != selected) await repository.saveAppFont(selected);
+    if (saved == null) await repository.saveAppFont(selected);
   }
 
   Future<void> _loadAppTheme() async {
@@ -137,9 +136,8 @@ class _NotebookAppState extends State<NotebookApp> {
   }
 
   Future<void> _setAppFont(String family) async {
-    const normalized = 'Estedad';
-    setState(() => appFontFamily = normalized);
-    await repository.saveAppFont(normalized);
+    setState(() => appFontFamily = family);
+    await repository.saveAppFont(family);
   }
 
   @override
@@ -262,6 +260,7 @@ class _NotesPageState extends State<NotesPage> {
         initialThemes: List.of(themes),
         appFontFamily: widget.appFontFamily,
         appThemeName: widget.appThemeName,
+        customFonts: Map<String, String>.of(customFonts),
         initialRandomThemeNames: randomThemeNames.toList(),
         initialTextColorPalette: List<int>.of(textColorPalette),
       ),
@@ -271,7 +270,9 @@ class _NotesPageState extends State<NotesPage> {
       themes..clear()..addAll(result.themes);
       randomThemeNames..clear()..addAll(result.randomThemeNames);
       textColorPalette..clear()..addAll(result.textColorPalette);
+      customFonts..clear()..addAll(result.customFonts);
     });
+    await repository.saveCustomFonts(customFonts);
     await persistThemes();
     await repository.saveRandomThemeNames(randomThemeNames.toList());
     await repository.saveTextColorPalette(textColorPalette);
