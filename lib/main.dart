@@ -1038,7 +1038,13 @@ class _NotesPageState extends State<NotesPage> {
 
         ])),
         Expanded(child:loading?const Center(child:CircularProgressIndicator()):items.isEmpty
-          ?Center(child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[const Icon(Icons.menu_book_rounded,size:64,color:Color(0xFF9B8CCB)),const SizedBox(height:12),Text(search.text.isEmpty?(selectedFolderId==null?'دفترچه‌ات هنوز خالی است':'این پوشه هنوز خالی است'):'یادداشتی پیدا نشد',style:const TextStyle(fontSize:18,fontWeight:FontWeight.bold)),const SizedBox(height:8),Text(search.text.isEmpty?'اولین یادداشتت را بنویس.':'عبارت دیگری را جستجو کن.'),if(search.text.isEmpty)...[const SizedBox(height:14),FilledButton(onPressed:()=>edit(),child:const Text('نوشتن اولین یادداشت'))]]))
+          ? (search.text.isNotEmpty
+              ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Text('یادداشتی پیدا نشد', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Text('عبارت دیگری را جستجو کن.'),
+                ]))
+              : const SizedBox.shrink())
           :ListView.separated(padding:const EdgeInsets.fromLTRB(20,0,20,100),itemCount:items.length,separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(_,i){
             final n=items[i];
             return Card(elevation:0,color:Color(n.themeColor),child:InkWell(onTap:()=>edit(n,search.text.trim().isEmpty||!_notePlainText(n.body).toLowerCase().contains(search.text.trim().toLowerCase())?null:search.text.trim()),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
