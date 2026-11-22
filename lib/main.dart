@@ -106,7 +106,7 @@ Future<void> main() async {
       ..addFont(Future<ByteData>.value(ByteData.sublistView(fontBytes)));
     await loader.load();
   } catch (error, stackTrace) {
-    debugPrint('Estedad font loading failed: $error\\n$stackTrace');
+    debugPrint('Estedad font loading failed: $error\n$stackTrace');
   }
   runApp(const NotebookApp());
 }
@@ -1088,6 +1088,7 @@ class _EditorPageState extends State<EditorPage> {
 
   @override
   void dispose() {
+    controller.removeListener(_rememberEditorFormatting);
     title.dispose();
     recorder.dispose();
     audioPlayer.dispose();
