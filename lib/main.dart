@@ -922,6 +922,41 @@ class _EditorPageState extends State<EditorPage> {
     themeFontFamily = widget.note?.themeFontFamily ?? widget.initialTheme.fontFamily;
     folderId = widget.note?.folderId ?? widget.initialFolderId;
     audioPaths.addAll(widget.note?.audios ?? const []);
+    _loadEditorPreferences();
+  }
+
+  double editorDefaultSize = 20.0;
+  String editorDefaultFont = 'Estedad';
+
+  Future<void> _loadEditorPreferences() async {
+    final repository = NotebookRepository();
+    editorDefaultFont = await repository.loadEditorFont();
+    editorDefaultSize = await repository.loadEditorFontSize();
+    if (!mounted) return;
+    if (widget.note == null && controller.document.length > 1) {
+      controller.formatText(0, controller.document.length - 1,
+          quill.Attribute.fromKeyValue('font', editorDefaultFont));
+      controller.formatText(0, controller.document.length - 1,
+          quill.Attribute.fromKeyValue('size', editorDefaultSize.toString()));
+      themeFontFamily = editorDefaultFont;
+    }
+    controller.addListener(_rememberEditorFormatting);
+    setState(() {});
+  }
+
+  void _rememberEditorFormatting() {
+    final attributes = controller.getSelectionStyle().attributes;
+    final font = attributes['font']?.value;
+    final size = double.tryParse('${attributes['size']?.value ?? ''}');
+    final repository = NotebookRepository();
+    if (font is String && font.isNotEmpty) {
+      editorDefaultFont = font;
+      repository.saveEditorFont(font);
+    }
+    if (size != null && size >= 6 && size <= 42) {
+      editorDefaultSize = size;
+      repository.saveEditorFontSize(size);
+    }
   }
 
   Future<void> addImage() async {
@@ -1010,14 +1045,14 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   Future<void> setNumericFontSize() async {
-    final input=TextEditingController(text:'16');
+    final input=TextEditingController(text:editorDefaultSize.toStringAsFixed(editorDefaultSize.truncateToDouble()==editorDefaultSize?0:1));
     final value=await showDialog<double>(context:context,builder:(ctx)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
       title:const Text('اندازه متن'),
       content:TextField(controller:input,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'اندازه بر حسب پوینت',hintText:'مثلاً 16')),
       actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('انصراف')),FilledButton(onPressed:(){final n=double.tryParse(input.text.trim());if(n!=null&&n>=6&&n<=42)Navigator.pop(ctx,n);},child:const Text('اعمال'))],
     )));
     input.dispose();
-    if(value!=null){controller.formatSelection(quill.Attribute.fromKeyValue('size',value.toString()));}
+    if(value!=null){controller.formatSelection(quill.Attribute.fromKeyValue('size',value.toString()));editorDefaultSize=value;await NotebookRepository().saveEditorFontSize(value);}
   }
 
   void save() {
