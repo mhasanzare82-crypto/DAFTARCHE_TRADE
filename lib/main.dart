@@ -1234,15 +1234,6 @@ class DrawingPainter extends CustomPainter{
   void paint(Canvas canvas,Size size){for(final s in strokes){draw(canvas,s.points,s.color,s.width);}draw(canvas,active,color,width);}
   @override
   bool shouldRepaint(covariant DrawingPainter old)=>true;
-}), '')
-        .replaceAll('_', ' ')
-        .trim();
-    return cleaned.isEmpty ? family : cleaned;
-  }
-  Map<String, String> get toolbarFontFamilies => {
-    for (final family in <String>{...widget.customFonts, themeFontFamily})
-      family: toolbarSample + ' - ' + _fontDisplayName(family),
-  };
 
   quill.Document _loadDocument(String? body, List<String> legacyImages) {
     if (body != null && body.startsWith(marker)) {
