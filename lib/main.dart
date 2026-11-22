@@ -1058,7 +1058,9 @@ class _EditorPageState extends State<EditorPage> {
     if (searchMatchOffsets.isEmpty) return;
     final nextLocal = currentSearchMatch + direction;
     if (nextLocal < 0 || nextLocal >= searchMatchOffsets.length) {
-      final targetNoteIndex = widget.initialSearchNoteIndex + direction;
+      final targetNoteIndex = widget.searchNotes.length > 1
+          ? (widget.initialSearchNoteIndex + direction + widget.searchNotes.length) % widget.searchNotes.length
+          : widget.initialSearchNoteIndex + direction;
       if (targetNoteIndex >= 0 && targetNoteIndex < widget.searchNotes.length) {
         final targetText = _notePlainText(widget.searchNotes[targetNoteIndex].body).toLowerCase();
         final query = widget.initialSearchTerm?.trim().toLowerCase() ?? '';
