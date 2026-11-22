@@ -871,7 +871,15 @@ class _EditorPageState extends State<EditorPage> {
   String _fontDisplayName(String family) {
     final cleaned = family
         .replaceFirst(RegExp(r'^custom_'), '')
-        .replaceFirst(RegExp(r'_\d{10,}
+        .replaceFirst(RegExp(r'_\d{10,}$'), '')
+        .replaceAll('_', ' ')
+        .trim();
+    return cleaned.isEmpty ? family : cleaned;
+  }
+  Map<String, String> get toolbarFontFamilies => {
+    for (final family in <String>{...widget.customFonts, themeFontFamily})
+      family: toolbarSample + ' - ' + _fontDisplayName(family),
+  };
 
   quill.Document _loadDocument(String? body, List<String> legacyImages) {
     if (body != null && body.startsWith(marker)) {
