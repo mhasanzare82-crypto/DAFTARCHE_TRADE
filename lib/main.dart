@@ -97,7 +97,19 @@ ThemeData _buildAppTheme(String preset, String fontFamily) {
   return base;
 }
 
-void main() => runApp(const NotebookApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final encodedFont = await rootBundle.loadString('assets/fonts/Estedad.ttf.base64');
+    final fontBytes = base64Decode(encodedFont);
+    final loader = FontLoader('Estedad')
+      ..addFont(Future<ByteData>.value(ByteData.sublistView(fontBytes)));
+    await loader.load();
+  } catch (error, stackTrace) {
+    debugPrint('Estedad font loading failed: $error\\n$stackTrace');
+  }
+  runApp(const NotebookApp());
+}
 class NotebookApp extends StatefulWidget {
   const NotebookApp({super.key});
   @override
@@ -119,9 +131,9 @@ class _NotebookAppState extends State<NotebookApp> {
   Future<void> _loadAppFont() async {
     final saved = await repository.loadAppFont();
     if (!mounted) return;
-    final selected = saved ?? 'Estedad';
+    final selected = (saved == null || saved == 'sans-serif' || saved == 'sans_serif' || saved == 'system-default') ? 'Estedad' : saved;
     setState(() => appFontFamily = selected);
-    if (saved == null) await repository.saveAppFont(selected);
+    if (saved != selected) await repository.saveAppFont(selected);
   }
 
   Future<void> _loadAppTheme() async {
