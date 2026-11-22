@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -80,7 +81,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
       final ext = (selected.extension ?? 'ttf').toLowerCase();
       final saved = File(folder.path + '/' + family + '.' + ext);
       await saved.writeAsBytes(bytes, flush: true);
-      final loader = FontLoader(family)..addFont(Future.value(ByteData.sublistView(bytes)));
+      final loader = ui.FontLoader(family)..addFont(Future.value(ByteData.sublistView(bytes)));
       await loader.load();
       if (!mounted) return;
       setState(() => customFonts[family] = saved.path);
