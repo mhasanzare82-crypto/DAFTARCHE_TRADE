@@ -301,14 +301,58 @@ class _NotesPageState extends State<NotesPage> {
     await persist();
   }
 
-  void manageFolder(NoteFolder folder) {
-    showModalBottomSheet<void>(context: context, builder: (c) => Directionality(
-      textDirection: TextDirection.rtl,
-      child: SafeArea(child: Wrap(children: [
-        ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('ویرایش نام پوشه'), onTap: () { Navigator.pop(c); editFolder(folder); }),
-        ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('حذف پوشه'), onTap: () { Navigator.pop(c); deleteFolder(folder); }),
-      ])),
-    ));
+  Future<void> manageFolders() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('مدیریت پوشه‌ها'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: folders.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Text('هنوز پوشه‌ای ایجاد نشده است'),
+                  )
+                : ListView(
+                    shrinkWrap: true,
+                    children: folders.map((folder) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.folder_outlined),
+                      title: Text(folder.name),
+                      trailing: PopupMenuButton<String>(
+                        tooltip: 'عملیات پوشه',
+                        onSelected: (action) {
+                          Navigator.pop(dialogContext);
+                          if (action == 'edit') editFolder(folder);
+                          if (action == 'delete') deleteFolder(folder);
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'edit', child: Text('ویرایش نام')),
+                          PopupMenuItem(value: 'delete', child: Text('حذف پوشه')),
+                        ],
+                      ),
+                    )).toList(),
+                  ),
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                createFolder();
+              },
+              icon: const Icon(Icons.create_new_folder_outlined),
+              label: const Text('پوشه جدید'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('بستن'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> moveNote(Note note) async {
@@ -938,7 +982,7 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context){
     final items=filtered;
     return Directionality(textDirection:TextDirection.rtl,child:Scaffold(
-      appBar:AppBar(title:const Text('دفترچه یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),actions:[PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'ایجاد پوشه',onPressed:createFolder,icon:const Icon(Icons.create_new_folder_outlined)),IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined)),IconButton(onPressed:()=>edit(),icon:const Icon(Icons.add_rounded))]),
+      appBar:AppBar(title:const Text('دفترچه یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),actions:[PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined)),IconButton(onPressed:()=>edit(),icon:const Icon(Icons.add_rounded))]),
       floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -947,10 +991,49 @@ class _NotesPageState extends State<NotesPage> {
           Text(notes.length.toString()+' یادداشت در دفترچه‌ات داری',style:TextStyle(color:Colors.grey.shade600)),
           const SizedBox(height:12),
           const Text('پوشه‌ها',style:TextStyle(fontWeight:FontWeight.bold)),
-          SingleChildScrollView(scrollDirection:Axis.horizontal,child:Row(children:[
-            Padding(padding:const EdgeInsets.only(left:8),child:ChoiceChip(label:const Text('همه'),selected:selectedFolderId==null,onSelected:(_)=>setState(()=>selectedFolderId=null))),
-            ...folders.map((folder)=>Padding(padding:const EdgeInsets.only(left:8),child:Row(mainAxisSize:MainAxisSize.min,children:[ChoiceChip(avatar:const Icon(Icons.folder_outlined,size:17),label:Text(folder.name),selected:selectedFolderId==folder.id,onSelected:(_)=>setState(()=>selectedFolderId=folder.id)),PopupMenuButton<String>(tooltip:'ویرایش یا حذف پوشه',padding:EdgeInsets.zero,iconSize:18,onSelected:(action){if(action=='edit')editFolder(folder);if(action=='delete')deleteFolder(folder);},itemBuilder:(_)=>[const PopupMenuItem(value:'edit',child:Text('ویرایش پوشه')),const PopupMenuItem(value:'delete',child:Text('حذف پوشه'))])]))),
-          ])),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => setState(() => selectedFolderId = null),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: selectedFolderId == null ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text('همه'),
+                  ),
+                ),
+              ),
+              ...folders.map((folder) => Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => setState(() => selectedFolderId = folder.id),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: selectedFolderId == folder.id ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(folder.name),
+                  ),
+                ),
+              )),
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: IconButton(
+                  tooltip: 'مدیریت پوشه‌ها',
+                  onPressed: manageFolders,
+                  icon: const Icon(Icons.folder_open_outlined),
+                ),
+              ),
+            ]),
+          ),
           const SizedBox(height:16),
 
         ])),
