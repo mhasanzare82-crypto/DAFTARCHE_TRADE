@@ -10,6 +10,32 @@ class NotebookRepository {
   static const _foldersKey = 'notebook_folders';
   static const _fontsKey = 'notebook_custom_fonts';
   static const _appFontKey = 'notebook_app_font_family';
+  static const _editorFontKey = 'notebook_editor_font_family';
+  static const _editorSizeKey = 'notebook_editor_font_size';
+
+  Future<String> loadEditorFont() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_editorFontKey) ?? 'Estedad';
+  }
+
+  Future<void> saveEditorFont(String family) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString(_editorFontKey, family)) {
+      throw StateError('Unable to persist editor font family');
+    }
+  }
+
+  Future<double> loadEditorFontSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_editorSizeKey) ?? 20.0;
+  }
+
+  Future<void> saveEditorFontSize(double size) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setDouble(_editorSizeKey, size)) {
+      throw StateError('Unable to persist editor font size');
+    }
+  }
 
   Future<List<Note>> loadNotes() async {
     final prefs = await SharedPreferences.getInstance();
