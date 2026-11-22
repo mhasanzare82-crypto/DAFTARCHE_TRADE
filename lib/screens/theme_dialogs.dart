@@ -1,4 +1,8 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/note.dart';
 
 class ThemeManagerResult {
@@ -7,7 +11,8 @@ class ThemeManagerResult {
   final List<int> textColorPalette;
   final String appFontFamily;
   final String appThemeName;
-  const ThemeManagerResult(this.themes, this.randomThemeNames, this.textColorPalette, this.appFontFamily, this.appThemeName);
+  final Map<String, String> customFonts;
+  const ThemeManagerResult(this.themes, this.randomThemeNames, this.textColorPalette, this.appFontFamily, this.appThemeName, this.customFonts);
 }
 
 class ThemeManagerDialog extends StatefulWidget {
@@ -16,6 +21,7 @@ class ThemeManagerDialog extends StatefulWidget {
   final String appThemeName;
   final List<String> initialRandomThemeNames;
   final List<int> initialTextColorPalette;
+  final Map<String, String> customFonts;
   const ThemeManagerDialog({
     super.key,
     required this.initialThemes,
@@ -23,6 +29,7 @@ class ThemeManagerDialog extends StatefulWidget {
     this.appThemeName = 'دودی',
     this.initialRandomThemeNames = const [],
     this.initialTextColorPalette = const [],
+    this.customFonts = const {},
   });
   @override
   State<ThemeManagerDialog> createState() => _ThemeManagerDialogState();
@@ -34,6 +41,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
   late List<int> textColorPalette;
   late String selectedAppFont;
   late String selectedAppTheme;
+  late Map<String, String> customFonts;
   double hue = 220, saturation = .12, brightness = .82;
   Color get selectedColor => HSVColor.fromAHSV(1, hue, saturation, brightness).toColor();
   Color readableText(Color c) => c.computeLuminance() > .42 ? const Color(0xFF211D27) : Colors.white;
@@ -46,15 +54,53 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
         ? items.map((e) => e.name).toList()
         : List.of(widget.initialRandomThemeNames);
     textColorPalette = List.of(widget.initialTextColorPalette);
-    selectedAppFont = 'Estedad';
+    selectedAppFont = widget.appFontFamily;
     selectedAppTheme = widget.appThemeName;
+    customFonts = Map<String, String>.of(widget.customFonts);
   }
 
+
+  Future<void> addCustomFont() async {
+    final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['ttf', 'otf']);
+    if (picked.isEmpty) return;
+    final selected = picked.first;
+    final path = selected.path;
+    if (path == null || path.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('مسیر فایل فونت قابل دسترسی نیست.')));
+      return;
+    }
+    try {
+      final bytes = await File(path).readAsBytes();
+      final stemParts = selected.name.split('.');
+      final original = stemParts.length > 1 ? stemParts.sublist(0, stemParts.length - 1).join('.') : selected.name;
+      final family = 'custom_' + original.replaceAll(RegExp(r'[^A-Za-z0-9_]+'), '_') + '_' + DateTime.now().microsecondsSinceEpoch.toString();
+      final appDir = await getApplicationDocumentsDirectory();
+      final folder = Directory(appDir.path + '/custom_fonts');
+      if (!await folder.exists()) await folder.create(recursive: true);
+      final ext = (selected.extension ?? 'ttf').toLowerCase();
+      final saved = File(folder.path + '/' + family + '.' + ext);
+      await saved.writeAsBytes(bytes, flush: true);
+      final loader = FontLoader(family)..addFont(Future.value(ByteData.sublistView(bytes)));
+      await loader.load();
+      if (!mounted) return;
+      setState(() => customFonts[family] = saved.path);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فونت «' + original + '» اضافه شد.')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('بارگذاری فونت ناموفق بود. فایل TTF یا OTF معتبر انتخاب کن.')));
+    }
+  }
+
+  void deleteCustomFont(String family) {
+    setState(() {
+      customFonts.remove(family);
+      if (selectedAppFont == family) selectedAppFont = 'Estedad';
+    });
+  }
 
   Future<void> editTheme([NoteTheme? old]) async {
     final result = await showDialog<NoteTheme>(
       context: context,
-      builder: (_) => ThemeEditorDialog(theme: old),
+      builder: (_) => ThemeEditorDialog(theme: old, customFonts: customFonts.keys.toList()),
     );
     if (result == null || !mounted) return;
     setState(() {
@@ -141,12 +187,26 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
             _section('۱. فونت رابط کاربری', Icons.font_download_outlined, [
               const Text('فونت منوها، عنوان‌ها و دکمه‌های برنامه را انتخاب کن.', style: TextStyle(fontSize: 12, color: Colors.black54)),
               const SizedBox(height: 10),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.check_circle, color: Colors.green),
-                title: Text('استعداد (Estedad)'),
-                subtitle: Text('تنها فونت رابط کاربری برنامه'),
+              DropdownButtonFormField<String>(
+                value: selectedAppFont,
+                decoration: const InputDecoration(labelText: 'فونت رابط کاربری', border: OutlineInputBorder()),
+                items: ['Estedad', ...customFonts.keys].toSet().map((family) => DropdownMenuItem(value: family, child: Text(family, style: TextStyle(fontFamily: family)))).toList(),
+                onChanged: (value) { if (value != null) setState(() => selectedAppFont = value); },
               ),
+              const SizedBox(height: 8),
+              Text('متن نمونه', style: TextStyle(fontFamily: selectedAppFont, fontSize: 17)),
+            ]),
+            _section('مدیریت فونت‌های دلخواه', Icons.library_add_outlined, [
+              const Text('فونت‌های واردشده برای رابط برنامه، تم‌ها و ویرایشگر یادداشت قابل استفاده هستند.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+              const SizedBox(height: 8),
+              FilledButton.icon(onPressed: addCustomFont, icon: const Icon(Icons.add), label: const Text('افزودن فونت از فایل')),
+              if (customFonts.isEmpty) const Text('هنوز فونت سفارشی اضافه نشده است.'),
+              ...customFonts.keys.map((family) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('متن نمونه', style: TextStyle(fontFamily: family, fontSize: 18)),
+                subtitle: Text(family),
+                trailing: IconButton(tooltip: 'حذف فونت', icon: const Icon(Icons.delete_outline), onPressed: () => deleteCustomFont(family)),
+              )),
             ]),
             _section('۲. تم اصلی برنامه', Icons.contrast_outlined, [
               const Text('تم کلی محیط برنامه مستقل از رنگ‌بندی تک‌تک یادداشت‌هاست.', style: TextStyle(fontSize: 12, color: Colors.black54)),
@@ -230,7 +290,7 @@ class _ThemeManagerDialogState extends State<ThemeManagerDialog> {
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
             const Spacer(),
             FilledButton.icon(
-              onPressed: () => Navigator.pop(context, ThemeManagerResult(List.of(items), List.of(randomThemeNames), List.of(textColorPalette), selectedAppFont, selectedAppTheme)),
+              onPressed: () => Navigator.pop(context, ThemeManagerResult(List.of(items), List.of(randomThemeNames), List.of(textColorPalette), selectedAppFont, selectedAppTheme, Map<String, String>.of(customFonts))),
               icon: const Icon(Icons.save_outlined),
               label: const Text('ذخیره تنظیمات'),
             ),
@@ -495,34 +555,17 @@ class _ThemeEditorDialogState extends State<ThemeEditorDialog> {
                 ),
                 _colorSliders(false),
                 const SizedBox(height: 16),
-                const Text('۳. فونت دلخواه'),
-                TextField(
-                  controller: font,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    labelText: 'نام فونت دستگاه یا فونت برنامه',
-                    hintText: 'مثلاً sans-serif',
-                  ),
-                ),
-                const Text(
-                  'برای نمایش دقیق، فونت باید روی دستگاه موجود یا به برنامه اضافه شده باشد.',
-                  style: TextStyle(fontSize: 11, color: Colors.black54),
-                ),
-                const SizedBox(height: 6),
+                const Text('۳. فونت دلخواه تم'),
+                const Text('فونت‌های واردشده در بخش مدیریت فونت را از اینجا انتخاب کن.', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
-                  children: [...commonFonts, ...widget.customFonts]
-                      .toSet()
-                      .map(
-                        (family) => ActionChip(
-                          label: Text(
-                            family,
-                            style: TextStyle(fontFamily: family, fontSize: 11),
-                          ),
-                          onPressed: () => setState(() => font.text = family),
-                        ),
-                      )
-                      .toList(),
+                  runSpacing: 6,
+                  children: [...commonFonts, ...widget.customFonts].toSet().map((family) => ChoiceChip(
+                    selected: font.text == family,
+                    label: Text('متن نمونه', style: TextStyle(fontFamily: family, fontSize: 13)),
+                    onSelected: (_) => setState(() => font.text = family),
+                  )).toList(),
                 ),
                 const SizedBox(height: 16),
                 const Text('پیش‌نمایش'),
