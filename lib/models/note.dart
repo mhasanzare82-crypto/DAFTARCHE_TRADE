@@ -10,7 +10,7 @@ class Note {
   final String? folderId;
   const Note(this.id, this.title, this.body, this.updated, [this.images = const [], this.themeColor = 0xFFEDE7F6, this.themeTextColor = 0xFF24212A, this.themeFontFamily = 'Estedad', this.folderId, this.audios = const []]);
   Map<String, dynamic> toJson() => {'id':id,'title':title,'body':body,'updated':updated.toIso8601String(),'images':images,'themeColor':themeColor,'themeTextColor':themeTextColor,'themeFontFamily':themeFontFamily,'folderId':folderId,'audios':audios};
-  factory Note.fromJson(Map<String,dynamic> j) => Note(j['id'],j['title'],j['body'],DateTime.parse(j['updated']),List<String>.from(j['images'] ?? const []),j['themeColor'] ?? 0xFFEDE7F6,j['themeTextColor'] ?? 0xFF24212A,j['themeFontFamily'] ?? 'Estedad',j['folderId'] as String?,List<String>.from(j['audios'] ?? const []));
+  factory Note.fromJson(Map<String,dynamic> j) => Note(j['id'],j['title'],j['body'],DateTime.parse(j['updated']),List<String>.from(j['images'] ?? const []),j['themeColor'] ?? 0xFFEDE7F6,j['themeTextColor'] ?? 0xFF24212A,(j['themeFontFamily'] == 'sans-serif' || j['themeFontFamily'] == 'sans_serif' || j['themeFontFamily'] == 'system-default') ? 'Estedad' : (j['themeFontFamily'] ?? 'Estedad'),j['folderId'] as String?,List<String>.from(j['audios'] ?? const []));
 }
 
 class NoteFolder {
@@ -26,5 +26,5 @@ class NoteTheme {
   final String fontFamily;
   const NoteTheme(this.name,this.backgroundColor,[this.textColor=0xFF24212A,this.fontFamily='Estedad']);
   Map<String,dynamic> toJson()=>{'name':name,'backgroundColor':backgroundColor,'textColor':textColor,'fontFamily':fontFamily};
-  factory NoteTheme.fromJson(Map<String,dynamic> j)=>NoteTheme(j['name'] as String,j['backgroundColor'] ?? j['color'] as int,j['textColor'] ?? 0xFF24212A,j['fontFamily'] ?? 'Estedad');
+  factory NoteTheme.fromJson(Map<String,dynamic> j)=>NoteTheme(j['name'] as String,j['backgroundColor'] ?? j['color'] as int,j['textColor'] ?? 0xFF24212A,(j['fontFamily'] == 'sans-serif' || j['fontFamily'] == 'sans_serif' || j['fontFamily'] == 'system-default') ? 'Estedad' : (j['fontFamily'] ?? 'Estedad'));
 }
