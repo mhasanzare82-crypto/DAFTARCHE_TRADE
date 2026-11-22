@@ -425,11 +425,31 @@ class _NotesPageState extends State<NotesPage> {
     if (cursor < value.length) spans.add(TextSpan(text: value.substring(cursor)));
     return TextSpan(style: baseStyle, children: spans);
   }
-  Future<void> edit([Note? note, String? searchTerm]) async {
+  Future<void> edit([Note? note, String? searchTerm, int initialMatch = 0]) async {
     final availableThemes = themes.where((theme) => randomThemeNames.contains(theme.name)).toList();
     final themePool = availableThemes.isNotEmpty ? availableThemes : (themes.isEmpty ? defaultThemes : themes);
     final selected=note==null?themePool[Random().nextInt(themePool.length)]:NoteTheme('فعلی',note.themeColor,note.themeTextColor,note.themeFontFamily);
-    final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,initialFolderId:note?.folderId??selectedFolderId,initialSearchTerm:searchTerm)));
+    final query = searchTerm?.trim() ?? '';
+    final searchNotes = query.isEmpty ? <Note>[] : (notes.where((n) => _notePlainText(n.body).toLowerCase().contains(query.toLowerCase())).toList()..sort((a,b)=>b.updated.compareTo(a.updated)));
+    final searchNoteIndex = searchNotes.indexWhere((n) => n.id == note?.id);
+    final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(
+      note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,
+      initialFolderId:note?.folderId??selectedFolderId,initialSearchTerm:query.isEmpty?null:query,
+      searchNotes:searchNotes,initialSearchNoteIndex:searchNoteIndex<0?0:searchNoteIndex,
+      initialSearchMatch:initialMatch,
+      onSearchNavigate: (updated, targetNoteIndex, targetMatch) async {
+        if (updated != null) {
+          final i = notes.indexWhere((n) => n.id == updated.id);
+          if (i < 0) { notes.add(updated); } else { notes[i] = updated; }
+          await persist();
+        }
+        if (!mounted || targetNoteIndex < 0 || targetNoteIndex >= searchNotes.length) return;
+        final target = notes.firstWhere((n) => n.id == searchNotes[targetNoteIndex].id, orElse: () => searchNotes[targetNoteIndex]);
+        Navigator.pop(context);
+        await Future<void>.delayed(Duration.zero);
+        if (mounted) await edit(target, query, targetMatch);
+      },
+    )));
     if(result==null)return;
     setState(() { final i=notes.indexWhere((n)=>n.id==result.id); if(i<0){notes.add(result);}else{notes[i]=result;} });
     await persist();
@@ -923,7 +943,11 @@ class EditorPage extends StatefulWidget {
   final NoteTheme initialTheme;
   final String? initialFolderId;
   final String? initialSearchTerm;
-  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme, this.initialFolderId, this.initialSearchTerm});
+  final List<Note> searchNotes;
+  final int initialSearchNoteIndex;
+  final int initialSearchMatch;
+  final Future<void> Function(Note?, int, int)? onSearchNavigate;
+  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme, this.initialFolderId, this.initialSearchTerm, this.searchNotes = const [], this.initialSearchNoteIndex = 0, this.initialSearchMatch = 0, this.onSearchNavigate});
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
@@ -1022,9 +1046,9 @@ class _EditorPageState extends State<EditorPage> {
       from = index + lowerQuery.length;
     }
     if (searchMatchOffsets.isNotEmpty) {
-      currentSearchMatch = 0;
+      currentSearchMatch = widget.initialSearchMatch.clamp(0, searchMatchOffsets.length - 1);
       controller.updateSelection(
-        TextSelection(baseOffset: searchMatchOffsets.first, extentOffset: searchMatchOffsets.first + query.length),
+        TextSelection(baseOffset: searchMatchOffsets[currentSearchMatch], extentOffset: searchMatchOffsets[currentSearchMatch] + query.length),
         quill.ChangeSource.local,
       );
     }
@@ -1032,8 +1056,22 @@ class _EditorPageState extends State<EditorPage> {
 
   void _navigateSearchMatch(int direction) {
     if (searchMatchOffsets.isEmpty) return;
-    currentSearchMatch = (currentSearchMatch + direction) % searchMatchOffsets.length;
-    if (currentSearchMatch < 0) currentSearchMatch += searchMatchOffsets.length;
+    final nextLocal = currentSearchMatch + direction;
+    if (nextLocal < 0 || nextLocal >= searchMatchOffsets.length) {
+      final targetNoteIndex = widget.initialSearchNoteIndex + direction;
+      if (targetNoteIndex >= 0 && targetNoteIndex < widget.searchNotes.length) {
+        final targetText = _notePlainText(widget.searchNotes[targetNoteIndex].body).toLowerCase();
+        final query = widget.initialSearchTerm?.trim().toLowerCase() ?? '';
+        final targetCount = query.isEmpty ? 0 : RegExp(RegExp.escape(query)).allMatches(targetText).length;
+        if (targetCount > 0) {
+          widget.onSearchNavigate?.call(_createNoteResult(), targetNoteIndex, direction > 0 ? 0 : targetCount - 1);
+          return;
+        }
+      }
+      currentSearchMatch = direction > 0 ? 0 : searchMatchOffsets.length - 1;
+    } else {
+      currentSearchMatch = nextLocal;
+    }
     final query = widget.initialSearchTerm?.trim() ?? '';
     final start = searchMatchOffsets[currentSearchMatch];
     controller.updateSelection(
@@ -1184,11 +1222,11 @@ class _EditorPageState extends State<EditorPage> {
     if(value!=null){controller.formatSelection(quill.Attribute.fromKeyValue('size',value.toString()));editorDefaultSize=value;await NotebookRepository().saveEditorFontSize(value);}
   }
 
-  void save() {
+  Note? _createNoteResult() {
     final delta = controller.document.toDelta().toJson();
     final plain = controller.document.toPlainText().trim();
     final hasContent = delta.any((op) => op is Map && op['insert'] is Map);
-    if (title.text.trim().isEmpty && plain.isEmpty && !hasContent) { Navigator.pop(context); return; }
+    if (title.text.trim().isEmpty && plain.isEmpty && !hasContent) return null;
     final imagePaths = <String>[];
     for (final op in delta) {
       if (op is Map && op['insert'] is Map) {
@@ -1196,11 +1234,16 @@ class _EditorPageState extends State<EditorPage> {
         if (image is String && !image.startsWith('http')) imagePaths.add(image);
       }
     }
-    Navigator.pop(context, Note(
+    return Note(
       widget.note?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
       title.text.trim(), marker + jsonEncode(delta), DateTime.now(), imagePaths,
       themeColor, themeTextColor, themeFontFamily, folderId, List.of(audioPaths),
-    ));
+    );
+  }
+
+  void save() {
+    final result = _createNoteResult();
+    Navigator.pop(context, result);
   }
 
   @override
@@ -1236,7 +1279,7 @@ class _EditorPageState extends State<EditorPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(tooltip: 'مورد قبلی', onPressed: () => _navigateSearchMatch(-1), icon: const Icon(Icons.keyboard_arrow_up_rounded)),
-                  Text('مورد ${currentSearchMatch + 1} از ${searchMatchOffsets.length}'),
+                  Text(widget.searchNotes.length > 1 ? 'یادداشت ${widget.initialSearchNoteIndex + 1} از ${widget.searchNotes.length} · مورد ${currentSearchMatch + 1} از ${searchMatchOffsets.length}' : 'مورد ${currentSearchMatch + 1} از ${searchMatchOffsets.length}'),
                   IconButton(tooltip: 'مورد بعدی', onPressed: () => _navigateSearchMatch(1), icon: const Icon(Icons.keyboard_arrow_down_rounded)),
                 ],
               ),
