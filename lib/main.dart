@@ -1337,16 +1337,6 @@ class _EditorPageState extends State<EditorPage> {
     });
   }
 
-  Future<void> setNumericFontSize() async {
-    final input=TextEditingController(text:editorDefaultSize.toStringAsFixed(editorDefaultSize.truncateToDouble()==editorDefaultSize?0:1));
-    final value=await showDialog<double>(context:context,builder:(ctx)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
-      title:const Text('اندازه متن'),
-      content:TextField(controller:input,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'اندازه بر حسب پوینت',hintText:'مثلاً 16')),
-      actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('انصراف')),FilledButton(onPressed:(){final n=double.tryParse(input.text.trim());if(n!=null&&n>=6&&n<=42)Navigator.pop(ctx,n);},child:const Text('اعمال'))],
-    )));
-    input.dispose();
-    if(value!=null){controller.formatSelection(quill.Attribute.fromKeyValue('size',value.toString()));editorDefaultSize=value;await NotebookRepository().saveEditorFontSize(value);}
-  }
 
   Note? _createNoteResult() {
     final delta = controller.document.toDelta().toJson();
@@ -1387,11 +1377,6 @@ class _EditorPageState extends State<EditorPage> {
     textDirection: TextDirection.rtl,
     child: Scaffold(
       appBar: AppBar(title: const Text('یادداشت'), actions: [
-        IconButton(
-          tooltip: 'تغییر تم این یادداشت',
-          onPressed: chooseEditorTheme,
-          icon: const Icon(Icons.palette_outlined),
-        ),
         TextButton.icon(onPressed: save, icon: const Icon(Icons.check), label: const Text('ذخیره')),
       ]),
       backgroundColor: Color(themeColor),      body: Padding(
@@ -1471,16 +1456,45 @@ class _EditorPageState extends State<EditorPage> {
                 fontSize: quill.QuillToolbarFontSizeButtonOptions(items: {for (var size = 6; size <= 42; size++) '$size': '$size'}),
               ),
               multiRowsDisplay: false,
-              embedButtons: FlutterQuillEmbeds.toolbarButtons(),
+              showUndo: true,
+              showRedo: true,
+              showFontFamily: true,
+              showFontSize: true,
+              showColorButton: true,
+              showBackgroundColorButton: true,
+              showAlignmentButtons: true,
+              showLeftAlignment: true,
+              showCenterAlignment: true,
+              showRightAlignment: true,
+              showJustifyAlignment: false,
+              showListNumbers: true,
+              showBoldButton: false,
+              showItalicButton: false,
+              showUnderLineButton: false,
+              showStrikeThrough: false,
+              showSmallButton: false,
+              showInlineCode: false,
+              showSubscript: false,
+              showSuperscript: false,
+              showClearFormat: false,
+              showHeaderStyle: false,
+              showListBullets: false,
+              showListCheck: false,
+              showCodeBlock: false,
+              showQuote: false,
+              showIndent: false,
+              showLink: false,
+              showDirection: false,
+              showSearchButton: false,
               customButtons: [
                 quill.QuillToolbarCustomButtonOptions(
-                  icon: const Icon(Icons.format_size),
-                  tooltip: 'اندازه عددی متن',
-                  onPressed: setNumericFontSize,
+                  icon: const Icon(Icons.palette_outlined),
+                  tooltip: 'انتخاب تم یادداشت',
+                  onPressed: chooseEditorTheme,
                 ),
                 quill.QuillToolbarCustomButtonOptions(
                   icon: const Icon(Icons.add_photo_alternate_outlined),
-                  tooltip: 'افزودن عکس و نقاشی روی آن',
+                  tooltip: 'افزودن تصویر',
                   onPressed: addImage,
                 ),
                 quill.QuillToolbarCustomButtonOptions(
@@ -1492,21 +1506,6 @@ class _EditorPageState extends State<EditorPage> {
                   onPressed: toggleRecording,
                 ),
               ],
-              showFontFamily: true,
-              showFontSize: true,
-              showBoldButton: true,
-              showItalicButton: true,
-              showUnderLineButton: true,
-              showStrikeThrough: true,
-              showColorButton: true,
-              showBackgroundColorButton: true,
-              showHeaderStyle: true,
-              showListNumbers: true,
-              showListBullets: true,
-              showAlignmentButtons: true,
-              showQuote: true,
-              showCodeBlock: true,
-              showClearFormat: true,
             ),
           ),
         ]),
