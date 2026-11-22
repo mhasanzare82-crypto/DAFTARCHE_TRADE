@@ -251,6 +251,66 @@ class _NotesPageState extends State<NotesPage> {
     setState((){folders.add(folder);selectedFolderId=folder.id;});
     await persistFolders();
   }
+  Future<void> editFolder(NoteFolder folder) async {
+    final controller = TextEditingController(text: folder.name);
+    final name = await showDialog<String>(context: context, builder: (c) => Directionality(
+      textDirection: TextDirection.rtl,
+      child: AlertDialog(
+        title: const Text('ویرایش پوشه'),
+        content: TextField(controller: controller, autofocus: true, maxLength: 30, decoration: const InputDecoration(labelText: 'نام پوشه')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('انصراف')),
+          FilledButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text('ذخیره')),
+        ],
+      ),
+    ));
+    controller.dispose();
+    if (name == null || name.trim().isEmpty || name.trim() == folder.name) return;
+    setState(() {
+      final index = folders.indexWhere((f) => f.id == folder.id);
+      if (index >= 0) folders[index] = NoteFolder(folder.id, name.trim());
+    });
+    await persistFolders();
+  }
+
+  Future<void> deleteFolder(NoteFolder folder) async {
+    final confirmed = await showDialog<bool>(context: context, builder: (c) => Directionality(
+      textDirection: TextDirection.rtl,
+      child: AlertDialog(
+        title: const Text('حذف پوشه؟'),
+        content: Text('پوشه «${folder.name}» حذف می‌شود؛ یادداشت‌های داخل آن حذف نمی‌شوند و به بخش بدون پوشه منتقل می‌شوند.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('انصراف')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('حذف پوشه')),
+        ],
+      ),
+    ));
+    if (confirmed != true) return;
+    setState(() {
+      folders.removeWhere((f) => f.id == folder.id);
+      for (var i = 0; i < notes.length; i++) {
+        final note = notes[i];
+        if (note.folderId == folder.id) {
+          notes[i] = Note(note.id, note.title, note.body, note.updated, note.images,
+            note.themeColor, note.themeTextColor, note.themeFontFamily, null, note.audios);
+        }
+      }
+      if (selectedFolderId == folder.id) selectedFolderId = null;
+    });
+    await persistFolders();
+    await persist();
+  }
+
+  void manageFolder(NoteFolder folder) {
+    showModalBottomSheet<void>(context: context, builder: (c) => Directionality(
+      textDirection: TextDirection.rtl,
+      child: SafeArea(child: Wrap(children: [
+        ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('ویرایش نام پوشه'), onTap: () { Navigator.pop(c); editFolder(folder); }),
+        ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('حذف پوشه'), onTap: () { Navigator.pop(c); deleteFolder(folder); }),
+      ])),
+    ));
+  }
+
   Future<void> moveNote(Note note) async {
     final destination=await showDialog<String?>(context:context,builder:(c)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
       title:const Text('انتقال یادداشت به پوشه'),
@@ -805,7 +865,7 @@ class _NotesPageState extends State<NotesPage> {
           const Text('پوشه‌ها',style:TextStyle(fontWeight:FontWeight.bold)),
           SingleChildScrollView(scrollDirection:Axis.horizontal,child:Row(children:[
             Padding(padding:const EdgeInsets.only(left:8),child:ChoiceChip(label:const Text('همه'),selected:selectedFolderId==null,onSelected:(_)=>setState(()=>selectedFolderId=null))),
-            ...folders.map((folder)=>Padding(padding:const EdgeInsets.only(left:8),child:ChoiceChip(avatar:const Icon(Icons.folder_outlined,size:17),label:Text(folder.name),selected:selectedFolderId==folder.id,onSelected:(_)=>setState(()=>selectedFolderId=folder.id)))),
+            ...folders.map((folder)=>Padding(padding:const EdgeInsets.only(left:8),child:Row(mainAxisSize:MainAxisSize.min,children:[ChoiceChip(avatar:const Icon(Icons.folder_outlined,size:17),label:Text(folder.name),selected:selectedFolderId==folder.id,onSelected:(_)=>setState(()=>selectedFolderId=folder.id)),PopupMenuButton<String>(tooltip:'ویرایش یا حذف پوشه',padding:EdgeInsets.zero,iconSize:18,onSelected:(action){if(action=='edit')editFolder(folder);if(action=='delete')deleteFolder(folder);},itemBuilder:(_)=>[const PopupMenuItem(value:'edit',child:Text('ویرایش پوشه')),const PopupMenuItem(value:'delete',child:Text('حذف پوشه'))])]))),
           ])),
           const SizedBox(height:16),
 
