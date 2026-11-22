@@ -1277,6 +1277,66 @@ class _EditorPageState extends State<EditorPage> {
     }
   }
 
+  Future<void> chooseEditorTheme() async {
+    final available = widget.themes.isNotEmpty
+        ? widget.themes
+        : <NoteTheme>[widget.initialTheme];
+    final selected = await showModalBottomSheet<NoteTheme>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Center(child: Text('تم این یادداشت', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: available.map((theme) {
+                      final isSelected = themeColor == theme.backgroundColor &&
+                          themeTextColor == theme.textColor &&
+                          themeFontFamily == theme.fontFamily;
+                      return Card(
+                        color: Color(theme.backgroundColor),
+                        child: ListTile(
+                          title: Text(theme.name, style: TextStyle(
+                            color: Color(theme.textColor),
+                            fontFamily: theme.fontFamily,
+                            fontWeight: FontWeight.w600,
+                          )),
+                          subtitle: Text('نمونه متن یادداشت', style: TextStyle(
+                            color: Color(theme.textColor),
+                            fontFamily: theme.fontFamily,
+                          )),
+                          trailing: isSelected
+                              ? Icon(Icons.check_circle, color: Color(theme.textColor))
+                              : Icon(Icons.circle_outlined, color: Color(theme.textColor).withOpacity(.7)),
+                          onTap: () => Navigator.pop(sheetContext, theme),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      themeColor = selected.backgroundColor;
+      themeTextColor = selected.textColor;
+      themeFontFamily = selected.fontFamily;
+    });
+  }
+
   Future<void> setNumericFontSize() async {
     final input=TextEditingController(text:editorDefaultSize.toStringAsFixed(editorDefaultSize.truncateToDouble()==editorDefaultSize?0:1));
     final value=await showDialog<double>(context:context,builder:(ctx)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
@@ -1327,6 +1387,11 @@ class _EditorPageState extends State<EditorPage> {
     textDirection: TextDirection.rtl,
     child: Scaffold(
       appBar: AppBar(title: const Text('یادداشت'), actions: [
+        IconButton(
+          tooltip: 'تغییر تم این یادداشت',
+          onPressed: chooseEditorTheme,
+          icon: const Icon(Icons.palette_outlined),
+        ),
         TextButton.icon(onPressed: save, icon: const Icon(Icons.check), label: const Text('ذخیره')),
       ]),
       backgroundColor: Color(themeColor),      body: Padding(
