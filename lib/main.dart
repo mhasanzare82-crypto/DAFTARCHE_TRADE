@@ -849,9 +849,73 @@ class _NotesPageState extends State<NotesPage> {
     }
   }
 
+  Future<void> changeNoteTheme(Note note) async {
+    final available = themes.isNotEmpty ? List<NoteTheme>.of(themes) : List<NoteTheme>.of(defaultThemes);
+    final selected = await showDialog<NoteTheme>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('انتخاب تم این یادداشت'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: available.map((theme) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: Color(theme.backgroundColor),
+                    child: Icon(Icons.text_fields_rounded, color: Color(theme.textColor)),
+                  ),
+                  title: Text(theme.name, style: TextStyle(
+                    color: Color(theme.textColor),
+                    fontFamily: theme.fontFamily,
+                  )),
+                  subtitle: Text('پس‌زمینه و رنگ متن این تم'),
+                  trailing: note.themeColor == theme.backgroundColor &&
+                      note.themeTextColor == theme.textColor &&
+                      note.themeFontFamily == theme.fontFamily
+                      ? const Icon(Icons.check_circle, color: Colors.green)
+                      : null,
+                  onTap: () => Navigator.pop(dialogContext, theme),
+                )).toList(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    final index = notes.indexWhere((item) => item.id == note.id);
+    if (index < 0) return;
+    setState(() {
+      final current = notes[index];
+      notes[index] = Note(
+        current.id,
+        current.title,
+        current.body,
+        DateTime.now(),
+        List<String>.of(current.images),
+        selected.backgroundColor,
+        selected.textColor,
+        selected.fontFamily,
+        current.folderId,
+        List<String>.of(current.audios),
+      );
+    });
+    await persist();
+  }
+
   void showNoteMenu(Note note) {
     showModalBottomSheet<void>(context: context, builder: (sheetContext) =>
       Directionality(textDirection: TextDirection.rtl, child: SafeArea(child: Wrap(children: [
+        ListTile(leading: const Icon(Icons.palette_outlined),
+          title: const Text('تغییر تم این یادداشت'),
+          onTap: () { Navigator.pop(sheetContext); changeNoteTheme(note); }),
         ListTile(leading: const Icon(Icons.file_download_outlined),
           title: const Text('خروجی Word برای این یادداشت'),
           onTap: () { Navigator.pop(sheetContext); exportDocx([note]); }),
