@@ -425,11 +425,11 @@ class _NotesPageState extends State<NotesPage> {
     if (cursor < value.length) spans.add(TextSpan(text: value.substring(cursor)));
     return TextSpan(style: baseStyle, children: spans);
   }
-  Future<void> edit([Note? note]) async {
+  Future<void> edit([Note? note, String? searchTerm]) async {
     final availableThemes = themes.where((theme) => randomThemeNames.contains(theme.name)).toList();
     final themePool = availableThemes.isNotEmpty ? availableThemes : (themes.isEmpty ? defaultThemes : themes);
     final selected=note==null?themePool[Random().nextInt(themePool.length)]:NoteTheme('فعلی',note.themeColor,note.themeTextColor,note.themeFontFamily);
-    final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,initialFolderId:note?.folderId??selectedFolderId)));
+    final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,initialFolderId:note?.folderId??selectedFolderId,initialSearchTerm:searchTerm)));
     if(result==null)return;
     setState(() { final i=notes.indexWhere((n)=>n.id==result.id); if(i<0){notes.add(result);}else{notes[i]=result;} });
     await persist();
@@ -874,7 +874,7 @@ class _NotesPageState extends State<NotesPage> {
           ?Center(child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[const Icon(Icons.menu_book_rounded,size:64,color:Color(0xFF9B8CCB)),const SizedBox(height:12),Text(search.text.isEmpty?(selectedFolderId==null?'دفترچه‌ات هنوز خالی است':'این پوشه هنوز خالی است'):'یادداشتی پیدا نشد',style:const TextStyle(fontSize:18,fontWeight:FontWeight.bold)),const SizedBox(height:8),Text(search.text.isEmpty?'اولین یادداشتت را بنویس.':'عبارت دیگری را جستجو کن.'),if(search.text.isEmpty)...[const SizedBox(height:14),FilledButton(onPressed:()=>edit(),child:const Text('نوشتن اولین یادداشت'))]]))
           :ListView.separated(padding:const EdgeInsets.fromLTRB(20,0,20,100),itemCount:items.length,separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(_,i){
             final n=items[i];
-            return Card(elevation:0,color:Color(n.themeColor),child:InkWell(onTap:()=>edit(n),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            return Card(elevation:0,color:Color(n.themeColor),child:InkWell(onTap:()=>edit(n,search.text.trim().isEmpty||!_notePlainText(n.body).toLowerCase().contains(search.text.trim().toLowerCase())?null:search.text.trim()),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               Row(children:[Expanded(child:RichText(text:_highlightSearchText(n.title.isEmpty?'بدون عنوان':n.title,search.text,TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),maxLines:1,overflow:TextOverflow.ellipsis)),IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))]),
               if(_notePlainText(n.body).isNotEmpty)RichText(
                 text:_highlightSearchText(
@@ -922,7 +922,8 @@ class EditorPage extends StatefulWidget {
   final List<String> customFonts;
   final NoteTheme initialTheme;
   final String? initialFolderId;
-  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme, this.initialFolderId});
+  final String? initialSearchTerm;
+  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme, this.initialFolderId, this.initialSearchTerm});
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
@@ -938,6 +939,9 @@ class _EditorPageState extends State<EditorPage> {
   late int themeColor, themeTextColor;
   late String themeFontFamily;
   String? folderId;
+  final GlobalKey<quill.EditorState> editorKey = GlobalKey<quill.EditorState>();
+  List<int> searchMatchOffsets = <int>[];
+  int currentSearchMatch = 0;
   static const marker = '__quill_note_v1__';
   static const toolbarSample = '>< sample text >';
   String _fontDisplayName(String family) {
@@ -989,12 +993,65 @@ class _EditorPageState extends State<EditorPage> {
       document: doc,
       selection: const TextSelection.collapsed(offset: 0),
     );
+    _prepareSearchMatches();
+    if (searchMatchOffsets.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _navigateSearchMatch(0);
+      });
+    }
     themeColor = widget.note?.themeColor ?? widget.initialTheme.backgroundColor;
     themeTextColor = widget.note?.themeTextColor ?? widget.initialTheme.textColor;
     themeFontFamily = widget.note?.themeFontFamily ?? widget.initialTheme.fontFamily;
     folderId = widget.note?.folderId ?? widget.initialFolderId;
     audioPaths.addAll(widget.note?.audios ?? const []);
     _loadEditorPreferences();
+  }
+
+  void _prepareSearchMatches() {
+    final query = widget.initialSearchTerm?.trim() ?? '';
+    searchMatchOffsets = <int>[];
+    if (query.isEmpty) return;
+    final text = controller.document.toPlainText();
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    var from = 0;
+    while (from <= lowerText.length - lowerQuery.length) {
+      final index = lowerText.indexOf(lowerQuery, from);
+      if (index < 0) break;
+      searchMatchOffsets.add(index);
+      from = index + lowerQuery.length;
+    }
+    if (searchMatchOffsets.isNotEmpty) {
+      currentSearchMatch = 0;
+      controller.updateSelection(
+        TextSelection(baseOffset: searchMatchOffsets.first, extentOffset: searchMatchOffsets.first + query.length),
+        quill.ChangeSource.local,
+      );
+    }
+  }
+
+  void _navigateSearchMatch(int direction) {
+    if (searchMatchOffsets.isEmpty) return;
+    currentSearchMatch = (currentSearchMatch + direction) % searchMatchOffsets.length;
+    if (currentSearchMatch < 0) currentSearchMatch += searchMatchOffsets.length;
+    final query = widget.initialSearchTerm?.trim() ?? '';
+    final start = searchMatchOffsets[currentSearchMatch];
+    controller.updateSelection(
+      TextSelection(baseOffset: start, extentOffset: start + query.length),
+      quill.ChangeSource.local,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final editorState = editorKey.currentState;
+      if (editorState == null || !editorState.scrollController.hasClients) return;
+      final caretRect = editorState.renderEditor.getLocalRectForCaret(TextPosition(offset: start));
+      final scroll = editorState.scrollController;
+      final target = (scroll.offset + caretRect.top - 80).clamp(
+        scroll.position.minScrollExtent,
+        scroll.position.maxScrollExtent,
+      );
+      scroll.animateTo(target.toDouble(), duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    });
+    if (mounted) setState(() {});
   }
 
   double editorDefaultSize = 20.0;
@@ -1172,10 +1229,23 @@ class _EditorPageState extends State<EditorPage> {
             decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
           ),
           const SizedBox(height: 8),
+          if (searchMatchOffsets.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(tooltip: 'مورد قبلی', onPressed: () => _navigateSearchMatch(-1), icon: const Icon(Icons.keyboard_arrow_up_rounded)),
+                  Text('مورد ${currentSearchMatch + 1} از ${searchMatchOffsets.length}'),
+                  IconButton(tooltip: 'مورد بعدی', onPressed: () => _navigateSearchMatch(1), icon: const Icon(Icons.keyboard_arrow_down_rounded)),
+                ],
+              ),
+            ),
           Expanded(
             child: quill.QuillEditor.basic(
               controller: controller,
               config: quill.QuillEditorConfig(
+                editorKey: editorKey,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 placeholder: 'متن یادداشتت را اینجا بنویس...',
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(
