@@ -83,8 +83,6 @@ ThemeData _buildAppTheme(String preset, String fontFamily) {
   final base = ThemeData(
     useMaterial3: true,
     fontFamily: fontFamily == 'system-default' ? null : fontFamily,
-    textTheme: fontFamily == 'Estedad' ? GoogleFonts.getTextTheme('Estedad') : null,
-    primaryTextTheme: fontFamily == 'Estedad' ? GoogleFonts.getTextTheme('Estedad') : null,
     colorScheme: ColorScheme.fromSeed(seedColor: primary, brightness: dark ? Brightness.dark : Brightness.light).copyWith(
       primary: primary,
       onPrimary: dark ? const Color(0xFF17191C) : Colors.white,
@@ -347,8 +345,7 @@ class _NotesPageState extends State<NotesPage> {
         style: baseStyle.copyWith(
           color: const Color(0xFF5B3FA3),
           fontWeight: FontWeight.bold,
-          backgroundColor: const Color(0xFFE6DDF8),
-        ),
+          backgroundColor: const Color(0xFFE6DDF8),        ),
       ));
       cursor = match.end;
     }
@@ -697,8 +694,7 @@ class _NotesPageState extends State<NotesPage> {
               final insert = Map<String, dynamic>.from(op['insert'] as Map);
               final image = insert['image'];
               if (image is String && restoredPaths.containsKey(image)) {
-                op['insert'] = {...insert, 'image': restoredPaths[image]};
-              }
+                op['insert'] = {...insert, 'image': restoredPaths[image]};              }
             }
             return op;
           }).toList();
@@ -1047,8 +1043,7 @@ class _EditorPageState extends State<EditorPage> {
       appBar: AppBar(title: const Text('یادداشت'), actions: [
         TextButton.icon(onPressed: save, icon: const Icon(Icons.check), label: const Text('ذخیره')),
       ]),
-      backgroundColor: Color(themeColor),
-      body: Padding(
+      backgroundColor: Color(themeColor),      body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
           TextField(
