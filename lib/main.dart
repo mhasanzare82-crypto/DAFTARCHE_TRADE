@@ -1271,9 +1271,36 @@ class _EditorPageState extends State<EditorPage> {
       family: toolbarSample + ' - ' + _fontDisplayName(family),
   };
 
+  double _fullImageWidth() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return 360;
+    final view = views.first;
+    return view.physicalSize.width / view.devicePixelRatio;
+  }
+
+  List<Map<String, dynamic>> _normalizeImageWidths(List<dynamic> rawOps) {
+    final width = _fullImageWidth();
+    return rawOps.map((raw) {
+      final op = Map<String, dynamic>.from(raw as Map);
+      final insert = op['insert'];
+      if (insert is Map && insert['image'] is String) {
+        final attrs = Map<String, dynamic>.from(op['attributes'] as Map? ?? {});
+        // Remove old fixed sizing so previously inserted images also expand.
+        attrs.remove('height');
+        attrs.remove('style');
+        attrs['width'] = width;
+        op['attributes'] = attrs;
+      }
+      return op;
+    }).toList();
+  }
+
   quill.Document _loadDocument(String? body, List<String> legacyImages) {
     if (body != null && body.startsWith(marker)) {
-      try { return quill.Document.fromJson(jsonDecode(body.substring(marker.length)) as List); } catch (_) {}
+      try {
+        final decoded = jsonDecode(body.substring(marker.length)) as List;
+        return quill.Document.fromJson(_normalizeImageWidths(decoded));
+      } catch (_) {}
     }
     final old = _decodeNoteBlocks(body ?? '');
     final ops = <Map<String, dynamic>>[];
@@ -1294,7 +1321,7 @@ class _EditorPageState extends State<EditorPage> {
       }
     }
     if (ops.isEmpty) ops.add({'insert': '\n'});
-    return quill.Document.fromJson(ops);
+    return quill.Document.fromJson(_normalizeImageWidths(ops));
   }
 
   @override
@@ -1646,7 +1673,7 @@ class _EditorPageState extends State<EditorPage> {
               controller: controller,
               config: quill.QuillEditorConfig(
                 editorKey: editorKey,
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 0),
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 0),\n                maxContentWidth: MediaQuery.sizeOf(context).width,
                 placeholder: 'متن یادداشتت را اینجا بنویس...',
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(
                   imageEmbedConfig: QuillEditorImageEmbedConfig(
