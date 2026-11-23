@@ -1673,7 +1673,8 @@ class _EditorPageState extends State<EditorPage> {
               controller: controller,
               config: quill.QuillEditorConfig(
                 editorKey: editorKey,
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 0),\n                maxContentWidth: MediaQuery.sizeOf(context).width,
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 0),
+                maxContentWidth: MediaQuery.sizeOf(context).width,
                 placeholder: 'متن یادداشتت را اینجا بنویس...',
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(
                   imageEmbedConfig: QuillEditorImageEmbedConfig(
