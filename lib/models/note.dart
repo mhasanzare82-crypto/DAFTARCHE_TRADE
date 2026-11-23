@@ -15,9 +15,10 @@ class Note {
 
 class NoteFolder {
   final String id,name;
-  const NoteFolder(this.id,this.name);
-  Map<String,dynamic> toJson()=>{'id':id,'name':name};
-  factory NoteFolder.fromJson(Map<String,dynamic> j)=>NoteFolder(j['id'] as String,j['name'] as String);
+  final bool isPinned;
+  const NoteFolder(this.id,this.name,{this.isPinned=false});
+  Map<String,dynamic> toJson()=>{'id':id,'name':name,'isPinned':isPinned};
+  factory NoteFolder.fromJson(Map<String,dynamic> j)=>NoteFolder(j['id'] as String,j['name'] as String,isPinned:j['isPinned'] == true);
 }
 
 class NoteTheme {
