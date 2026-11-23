@@ -1031,10 +1031,7 @@ class _NotesPageState extends State<NotesPage> {
               ),
             ]),
           ),
-          const SizedBox(height:12),
-          Text(notes.length.toString()+' یادداشت در دفترچه‌ات داری',style:TextStyle(color:Colors.grey.shade600)),
-          const SizedBox(height:12),
-          const Text('پوشه‌ها',style:TextStyle(fontWeight:FontWeight.bold)),          const SizedBox(height:16),
+          const SizedBox(height:16),
 
 
         ])),
