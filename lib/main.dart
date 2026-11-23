@@ -1651,6 +1651,10 @@ class _EditorPageState extends State<EditorPage> {
                       final local = File(imageUrl);
                       return local.existsSync() ? FileImage(local) : null;
                     },
+                    imageBuilder: (context, imageProvider) => SizedBox(
+                      width: MediaQuery.of(context).size.width,
+                      child: Image(image: imageProvider, width: MediaQuery.of(context).size.width, fit: BoxFit.fitWidth),
+                    ),
                   ),
                 ),
               ),
