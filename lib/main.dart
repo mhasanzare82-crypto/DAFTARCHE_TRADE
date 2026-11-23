@@ -268,7 +268,7 @@ class _NotesPageState extends State<NotesPage> {
     if (name == null || name.trim().isEmpty || name.trim() == folder.name) return;
     setState(() {
       final index = folders.indexWhere((f) => f.id == folder.id);
-      if (index >= 0) folders[index] = NoteFolder(folder.id, name.trim());
+      if (index >= 0) folders[index] = NoteFolder(folder.id, name.trim(), isPinned: folder.isPinned);
     });
     await persistFolders();
   }
@@ -964,7 +964,7 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context){
     final items=filtered;
     return Directionality(textDirection:TextDirection.rtl,child:Scaffold(
-      appBar:AppBar(title:const Text('دفترچه یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),actions:[PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined)),IconButton(onPressed:()=>edit(),icon:const Icon(Icons.add_rounded))]),
+      appbar:AppBar(title:const Text('دفترچه یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),actions:[PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined))]),
       floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -988,7 +988,7 @@ class _NotesPageState extends State<NotesPage> {
                   ),
                 ),
               ),
-              ...folders.map((folder) => Padding(
+              ...([...folders]..sort((a, b) => (b.isPinned ? 1 : 0).compareTo(a.isPinned ? 1 : 0))).map((folder) => Padding(
                 padding: const EdgeInsets.only(left: 8),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
@@ -1090,7 +1090,8 @@ class _FolderManagementPageState extends State<FolderManagementPage> {
   @override
   void initState() {
     super.initState();
-    folders = List<NoteFolder>.of(widget.initialFolders);
+    folders = List<NoteFolder>.of(widget.initialFolders)
+      ..sort((a, b) => (b.isPinned ? 1 : 0).compareTo(a.isPinned ? 1 : 0));
   }
 
   Future<String?> _askName({String? initialName}) async {
@@ -1132,7 +1133,18 @@ class _FolderManagementPageState extends State<FolderManagementPage> {
     if (name == null || name == folder.name || !mounted) return;
     setState(() {
       final index = folders.indexWhere((item) => item.id == folder.id);
-      if (index >= 0) folders[index] = NoteFolder(folder.id, name);
+      if (index >= 0) folders[index] = NoteFolder(folder.id, name, isPinned: folder.isPinned);
+    });
+    await widget.onChanged(List<NoteFolder>.of(folders), <String>[]);
+  }
+
+  Future<void> _togglePin(NoteFolder folder) async {
+    setState(() {
+      final index = folders.indexWhere((item) => item.id == folder.id);
+      if (index >= 0) {
+        folders[index] = NoteFolder(folder.id, folder.name, isPinned: !folder.isPinned);
+        folders.sort((a, b) => (b.isPinned ? 1 : 0).compareTo(a.isPinned ? 1 : 0));
+      }
     });
     await widget.onChanged(List<NoteFolder>.of(folders), <String>[]);
   }
@@ -1161,11 +1173,11 @@ class _FolderManagementPageState extends State<FolderManagementPage> {
   Widget build(BuildContext context) => Directionality(
     textDirection: TextDirection.rtl,
     child: Scaffold(
-      appBar: AppBar(
-        title: const Text('مدیریت پوشه‌ها'),
-        actions: [
-          IconButton(tooltip: 'پوشه جدید', onPressed: _createFolder, icon: const Icon(Icons.create_new_folder_outlined)),
-        ],
+      appBar: AppBar(title: const Text('مدیریت پوشه‌ها')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _createFolder,
+        icon: const Icon(Icons.create_new_folder_outlined),
+        label: const Text('پوشه جدید'),
       ),
       body: folders.isEmpty
           ? const Center(child: Text('هنوز پوشه‌ای ایجاد نشده است.'))
@@ -1184,15 +1196,26 @@ class _FolderManagementPageState extends State<FolderManagementPage> {
                       widget.onSelectFolder(folder.id);
                       Navigator.pop(context);
                     },
-                    trailing: PopupMenuButton<String>(
-                      tooltip: 'عملیات پوشه',
-                      onSelected: (action) {
-                        if (action == 'rename') _renameFolder(folder);
-                        if (action == 'delete') _deleteFolder(folder);
-                      },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'rename', child: Text('تغییر نام')),
-                        PopupMenuItem(value: 'delete', child: Text('حذف پوشه')),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: folder.isPinned ? 'برداشتن سنجاق' : 'سنجاق کردن پوشه',
+                          onPressed: () => _togglePin(folder),
+                          icon: Icon(folder.isPinned ? Icons.push_pin : Icons.push_pin_outlined),
+                          color: folder.isPinned ? Theme.of(context).colorScheme.primary : null,
+                        ),
+                        PopupMenuButton<String>(
+                          tooltip: 'عملیات پوشه',
+                          onSelected: (action) {
+                            if (action == 'rename') _renameFolder(folder);
+                            if (action == 'delete') _deleteFolder(folder);
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(value: 'rename', child: Text('تغییر نام')),
+                            PopupMenuItem(value: 'delete', child: Text('حذف پوشه')),
+                          ],
+                        ),
                       ],
                     ),
                   ),
