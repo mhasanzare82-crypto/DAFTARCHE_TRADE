@@ -1444,7 +1444,7 @@ class _EditorPageState extends State<EditorPage> {
     // Set the Quill image width attribute directly. The image embed builder
     // reads this attribute and constrains the displayed image to the editor's
     // available width; its height remains automatic to preserve aspect ratio.
-    final imageWidth = MediaQuery.sizeOf(context).width - 32;
+    final imageWidth = MediaQuery.sizeOf(context).width;
     final imageDelta = delta.Delta()
       ..retain(index)
       ..insert(
@@ -1618,12 +1618,15 @@ class _EditorPageState extends State<EditorPage> {
         TextButton.icon(onPressed: save, icon: const Icon(Icons.check), label: const Text('ذخیره')),
       ]),
       backgroundColor: Color(themeColor),      body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(vertical: 16),
         child: Column(children: [
-          TextField(
-            controller: title, autofocus: false,
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: themeFontFamily),
-            decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: title, autofocus: false,
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: themeFontFamily),
+              decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
+            ),
           ),
           const SizedBox(height: 8),
           if (searchMatchOffsets.isNotEmpty)
@@ -1643,7 +1646,7 @@ class _EditorPageState extends State<EditorPage> {
               controller: controller,
               config: quill.QuillEditorConfig(
                 editorKey: editorKey,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 0),
                 placeholder: 'متن یادداشتت را اینجا بنویس...',
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(
                   imageEmbedConfig: QuillEditorImageEmbedConfig(
