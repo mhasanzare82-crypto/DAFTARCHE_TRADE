@@ -302,54 +302,36 @@ class _NotesPageState extends State<NotesPage> {
   }
 
   Future<void> manageFolders() async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          title: const Text('مدیریت پوشه‌ها'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: folders.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Text('هنوز پوشه‌ای ایجاد نشده است'),
-                  )
-                : ListView(
-                    shrinkWrap: true,
-                    children: folders.map((folder) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.folder_outlined),
-                      title: Text(folder.name),
-                      trailing: PopupMenuButton<String>(
-                        tooltip: 'عملیات پوشه',
-                        onSelected: (action) {
-                          Navigator.pop(dialogContext);
-                          if (action == 'edit') editFolder(folder);
-                          if (action == 'delete') deleteFolder(folder);
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'edit', child: Text('ویرایش نام')),
-                          PopupMenuItem(value: 'delete', child: Text('حذف پوشه')),
-                        ],
-                      ),
-                    )).toList(),
-                  ),
-          ),
-          actions: [
-            TextButton.icon(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                createFolder();
-              },
-              icon: const Icon(Icons.create_new_folder_outlined),
-              label: const Text('پوشه جدید'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('بستن'),
-            ),
-          ],
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FolderManagementPage(
+          initialFolders: List<NoteFolder>.of(folders),
+          onChanged: (updatedFolders, deletedIds) async {
+            setState(() {
+              folders
+                ..clear()
+                ..addAll(updatedFolders);
+              if (selectedFolderId != null && deletedIds.contains(selectedFolderId)) {
+                selectedFolderId = null;
+              }
+              if (deletedIds.isNotEmpty) {
+                for (var i = 0; i < notes.length; i++) {
+                  final note = notes[i];
+                  if (deletedIds.contains(note.folderId)) {
+                    notes[i] = Note(note.id, note.title, note.body, note.updated,
+                      List<String>.of(note.images), note.themeColor, note.themeTextColor,
+                      note.themeFontFamily, null, List<String>.of(note.audios));
+                  }
+                }
+              }
+            });
+            await persistFolders();
+            if (deletedIds.isNotEmpty) await persist();
+          },
+          onSelectFolder: (folderId) {
+            setState(() => selectedFolderId = folderId);
+          },
         ),
       ),
     );
@@ -1085,6 +1067,140 @@ class _NotesPageState extends State<NotesPage> {
       ])),
     ));
   }
+}
+
+class FolderManagementPage extends StatefulWidget {
+  final List<NoteFolder> initialFolders;
+  final Future<void> Function(List<NoteFolder>, List<String>) onChanged;
+  final void Function(String?) onSelectFolder;
+  const FolderManagementPage({
+    super.key,
+    required this.initialFolders,
+    required this.onChanged,
+    required this.onSelectFolder,
+  });
+
+  @override
+  State<FolderManagementPage> createState() => _FolderManagementPageState();
+}
+
+class _FolderManagementPageState extends State<FolderManagementPage> {
+  late List<NoteFolder> folders;
+
+  @override
+  void initState() {
+    super.initState();
+    folders = List<NoteFolder>.of(widget.initialFolders);
+  }
+
+  Future<String?> _askName({String? initialName}) async {
+    final controller = TextEditingController(text: initialName ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: Text(initialName == null ? 'ایجاد پوشه' : 'تغییر نام پوشه'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 30,
+            decoration: const InputDecoration(labelText: 'نام پوشه'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('ذخیره')),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.trim().isEmpty) return null;
+    return name.trim();
+  }
+
+  Future<void> _createFolder() async {
+    final name = await _askName();
+    if (name == null || !mounted) return;
+    final folder = NoteFolder(DateTime.now().microsecondsSinceEpoch.toString(), name);
+    setState(() => folders.add(folder));
+    await widget.onChanged(List<NoteFolder>.of(folders), <String>[]);
+  }
+
+  Future<void> _renameFolder(NoteFolder folder) async {
+    final name = await _askName(initialName: folder.name);
+    if (name == null || name == folder.name || !mounted) return;
+    setState(() {
+      final index = folders.indexWhere((item) => item.id == folder.id);
+      if (index >= 0) folders[index] = NoteFolder(folder.id, name);
+    });
+    await widget.onChanged(List<NoteFolder>.of(folders), <String>[]);
+  }
+
+  Future<void> _deleteFolder(NoteFolder folder) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('حذف پوشه؟'),
+          content: Text('پوشه «${folder.name}» حذف می‌شود؛ یادداشت‌های آن باقی می‌مانند و به بخش بدون پوشه منتقل می‌شوند.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => folders.removeWhere((item) => item.id == folder.id));
+    await widget.onChanged(List<NoteFolder>.of(folders), <String>[folder.id]);
+  }
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+    textDirection: TextDirection.rtl,
+    child: Scaffold(
+      appBar: AppBar(
+        title: const Text('مدیریت پوشه‌ها'),
+        actions: [
+          IconButton(tooltip: 'پوشه جدید', onPressed: _createFolder, icon: const Icon(Icons.create_new_folder_outlined)),
+        ],
+      ),
+      body: folders.isEmpty
+          ? const Center(child: Text('هنوز پوشه‌ای ایجاد نشده است.'))
+          : ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: folders.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final folder = folders[index];
+                return Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.folder_outlined),
+                    title: Text(folder.name),
+                    subtitle: const Text('لمس برای نمایش یادداشت‌های پوشه'),
+                    onTap: () {
+                      widget.onSelectFolder(folder.id);
+                      Navigator.pop(context);
+                    },
+                    trailing: PopupMenuButton<String>(
+                      tooltip: 'عملیات پوشه',
+                      onSelected: (action) {
+                        if (action == 'rename') _renameFolder(folder);
+                        if (action == 'delete') _deleteFolder(folder);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'rename', child: Text('تغییر نام')),
+                        PopupMenuItem(value: 'delete', child: Text('حذف پوشه')),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+    ),
+  );
 }
 
 class EditorPage extends StatefulWidget {
