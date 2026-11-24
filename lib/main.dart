@@ -522,6 +522,7 @@ class _NotesPageState extends State<NotesPage> {
     final searchNoteIndex = searchNotes.indexWhere((n) => n.id == note?.id);
     final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(
       note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,
+      existingNotes: List<Note>.of(notes),
       initialFolderId:note?.folderId??selectedFolderId,initialSearchTerm:query.isEmpty?null:query,
       searchNotes:searchNotes,initialSearchNoteIndex:searchNoteIndex<0?0:searchNoteIndex,
       initialSearchMatch:initialMatch,
@@ -1293,13 +1294,14 @@ class EditorPage extends StatefulWidget {
   final List<NoteTheme> themes;
   final List<String> customFonts;
   final NoteTheme initialTheme;
+  final List<Note> existingNotes;
   final String? initialFolderId;
   final String? initialSearchTerm;
   final List<Note> searchNotes;
   final int initialSearchNoteIndex;
   final int initialSearchMatch;
   final Future<void> Function(Note?, int, int)? onSearchNavigate;
-  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme, this.initialFolderId, this.initialSearchTerm, this.searchNotes = const [], this.initialSearchNoteIndex = 0, this.initialSearchMatch = 0, this.onSearchNavigate});
+  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme,this.existingNotes = const [], this.initialFolderId, this.initialSearchTerm, this.searchNotes = const [], this.initialSearchNoteIndex = 0, this.initialSearchMatch = 0, this.onSearchNavigate});
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
@@ -1684,9 +1686,144 @@ class _EditorPageState extends State<EditorPage> {
     );
   }
 
+  static const String _noteEntrySeparator = '-------------------------------------------------------------------';
+
   void save() {
-    final result = _createNoteResult();
-    Navigator.pop(context, result);
+    final draft = _createNoteResult();
+    if (draft == null) {
+      Navigator.pop(context, null);
+      return;
+    }
+
+    // Existing notes are resolved by exact title across every folder.
+    // Editing an already-open note continues to update that note by ID.
+    if (widget.note == null) {
+      final matches = widget.existingNotes
+          .where((note) => note.title.trim() == draft.title.trim())
+          .toList();
+
+      if (matches.length > 1) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('از این عنوان چند مورد وجود دارد؛ ذخیره انجام نشد. ابتدا عنوان را یکتا کن.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+
+      if (matches.length == 1) {
+        final existing = matches.single;
+        try {
+          final previousDocument = _loadDocument(existing.body, existing.images);
+          final mergedOperations = <Map<String, dynamic>>[
+            ...previousDocument.toDelta().toJson().map((op) => Map<String, dynamic>.from(op as Map)),
+            ...controller.document.toDelta().toJson().map((op) => Map<String, dynamic>.from(op as Map)),
+            {'insert': '\\n$_noteEntrySeparator\\n'},
+          ];
+          final mergedDocument = quill.Document.fromJson(mergedOperations);
+          final mergedImages = <String>{...existing.images, ...draft.images}.toList();
+          final mergedAudios = <String>{...existing.audios, ...draft.audios}.toList();
+          final result = Note(
+            existing.id,
+            existing.title,
+            marker + jsonEncode(mergedDocument.toDelta().toJson()),
+            DateTime.now(),
+            mergedImages,
+            existing.themeColor,
+            existing.themeTextColor,
+            existing.themeFontFamily,
+            existing.folderId,
+            mergedAudios,
+          );
+          Navigator.pop(context, result);
+          return;
+        } catch (error) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('افزودن نوشته به یادداشت قبلی انجام نشد: $error')),
+          );
+          return;
+        }
+      }
+    }
+
+    Navigator.pop(context, draft);
+  }
+
+  Future<void> chooseExistingTitle() async {
+    final searchController = TextEditingController();
+    final selectedTitle = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final query = searchController.text.trim().toLowerCase();
+          final filtered = widget.existingNotes
+              .where((note) => note.title.trim().isNotEmpty)
+              .where((note) => note.title.toLowerCase().contains(query))
+              .toList()
+            ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              title: const Text('انتخاب عنوان قبلی'),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 420,
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: searchController,
+                      autofocus: true,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        hintText: 'جست‌وجوی عنوان...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? const Center(child: Text('عنوانی پیدا نشد.'))
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (_, index) {
+                                final note = filtered[index];
+                                return ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.description_outlined),
+                                  title: Text(note.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(
+                                    widget.existingNotes.where((item) => item.title.trim() == note.title.trim()).length > 1
+                                        ? 'عنوان تکراری؛ هنگام ذخیره پیام خطا نمایش داده می‌شود'
+                                        : 'انتخاب عنوان',
+                                    maxLines: 2,
+                                  ),
+                                  onTap: () => Navigator.pop(dialogContext, note.title),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('انصراف'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    searchController.dispose();
+    if (selectedTitle == null || !mounted) return;
+    setState(() {
+      title.text = selectedTitle;
+      title.selection = TextSelection.collapsed(offset: title.text.length);
+    });
   }
 
   @override
@@ -1711,10 +1848,21 @@ class _EditorPageState extends State<EditorPage> {
         child: Column(children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: title, autofocus: false,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: themeFontFamily),
-              decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: title, autofocus: false,
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: themeFontFamily),
+                    decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'انتخاب از عنوان‌های قبلی',
+                  onPressed: chooseExistingTitle,
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
