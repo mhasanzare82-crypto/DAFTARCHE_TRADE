@@ -1719,7 +1719,7 @@ class _EditorPageState extends State<EditorPage> {
           final mergedOperations = <Map<String, dynamic>>[
             ...previousDocument.toDelta().toJson().map((op) => Map<String, dynamic>.from(op as Map)),
             ...controller.document.toDelta().toJson().map((op) => Map<String, dynamic>.from(op as Map)),
-            {'insert': '\\n$_noteEntrySeparator\\n'},
+            {'insert': '\n$_noteEntrySeparator\n'},
           ];
           final mergedDocument = quill.Document.fromJson(mergedOperations);
           final mergedImages = <String>{...existing.images, ...draft.images}.toList();
