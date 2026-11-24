@@ -240,6 +240,68 @@ class _NotesPageState extends State<NotesPage> {
   Future<void> persistFolders() => repository.saveFolders(folders);
   Future<void> persistThemes() => repository.saveThemes(themes);
 
+  Future<void> applyRandomThemeToAllNotes() async {
+    final enabledThemes = themes
+        .where((theme) => randomThemeNames.contains(theme.name))
+        .toList();
+    final themePool = enabledThemes.isNotEmpty ? enabledThemes : themes;
+    if (themePool.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('برای تغییر تم، ابتدا یک تم بساز.')),
+        );
+      }
+      return;
+    }
+
+    final currentTheme = notes.isNotEmpty &&
+            notes.every((note) =>
+                note.themeColor == notes.first.themeColor &&
+                note.themeTextColor == notes.first.themeTextColor &&
+                note.themeFontFamily == notes.first.themeFontFamily)
+        ? notes.first
+        : null;
+    final alternatives = currentTheme == null
+        ? themePool
+        : themePool.where((theme) =>
+            theme.backgroundColor != currentTheme.themeColor ||
+            theme.textColor != currentTheme.themeTextColor ||
+            theme.fontFamily != currentTheme.themeFontFamily).toList();
+    final choices = alternatives.isNotEmpty ? alternatives : themePool;
+    final selected = choices[Random().nextInt(choices.length)];
+
+    final updatedNotes = notes
+        .map((note) => Note(
+              note.id,
+              note.title,
+              note.body,
+              note.updated,
+              List<String>.of(note.images),
+              selected.backgroundColor,
+              selected.textColor,
+              selected.fontFamily,
+              note.folderId,
+              List<String>.of(note.audios),
+            ))
+        .toList();
+
+    setState(() {
+      notes
+        ..clear()
+        ..addAll(updatedNotes);
+    });
+
+    try {
+      await persist();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ذخیره تم جدید انجام نشد: $error')),
+        );
+      }
+    }
+  }
+
   Future<void> createFolder() async {
     final controller=TextEditingController();
     final name=await showDialog<String>(context:context,builder:(c)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
@@ -964,7 +1026,7 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context){
     final items=filtered;
     return Directionality(textDirection:TextDirection.rtl,child:Scaffold(
-      appBar:AppBar(title:const Text('دفترچه یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),actions:[PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined))]),
+      appBar:AppBar(title:const Text('دفترچه یادداشت',style:TextStyle(fontWeight:FontWeight.bold)),actions:[IconButton(tooltip:'تغییر تصادفی تم همه یادداشت‌ها',onPressed:applyRandomThemeToAllNotes,icon:const Icon(Icons.casino_outlined)),PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined))]),
       floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
