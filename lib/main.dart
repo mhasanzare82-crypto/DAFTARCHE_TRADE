@@ -2549,7 +2549,7 @@ class _EditorPageState extends State<EditorPage> {
                   child: TextField(
                     controller: title, autofocus: false,
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: themeFontFamily),
-                    decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
+                    decoration: const InputDecoration(hintText: 'عنوان', border: InputBorder.none),
                   ),
                 ),
                 IconButton(
@@ -2580,7 +2580,7 @@ class _EditorPageState extends State<EditorPage> {
                 editorKey: editorKey,
                 padding: EdgeInsets.symmetric(vertical: editorVerticalPadding, horizontal: editorHorizontalPadding),
                 maxContentWidth: MediaQuery.sizeOf(context).width,
-                placeholder: 'متن یادداشتت را اینجا بنویس...',
+                placeholder: 'تایپ را آغاز کنید',
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(
                   imageEmbedConfig: QuillEditorImageEmbedConfig(
                     imageProviderBuilder: (context, imageUrl) {
