@@ -1967,6 +1967,7 @@ class _EditorPageState extends State<EditorPage> {
   String editorDefaultFont = 'Estedad';
   double editorHorizontalPadding = 16.0;
   double editorVerticalPadding = 14.0;
+  double editorLineHeight = 1.4;
 
   Future<void> _showEditorPaddingSettings() async {
     final repository = NotebookRepository();
@@ -2049,12 +2050,102 @@ class _EditorPageState extends State<EditorPage> {
     }
   }
 
+  void _applyEditorLineHeight(double value) {
+    final length = controller.document.length - 1;
+    if (length <= 0) return;
+    controller.formatText(
+      0,
+      length,
+      quill.Attribute.clone(quill.Attribute.lineHeight, value),
+    );
+  }
+
+  Future<void> _showEditorLineHeightSettings() async {
+    final repository = NotebookRepository();
+    final previous = editorLineHeight;
+    var value = editorLineHeight;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('فاصله عمودی بین خطوط'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(child: Text('ارتفاع خطوط')),
+                    Text(value.toStringAsFixed(2)),
+                  ],
+                ),
+                Slider(
+                  value: value,
+                  min: 1.0,
+                  max: 2.0,
+                  divisions: 20,
+                  label: value.toStringAsFixed(2),
+                  onChanged: (next) {
+                    setDialogState(() => value = next);
+                    if (mounted) setState(() => editorLineHeight = next);
+                    _applyEditorLineHeight(next);
+                  },
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      setDialogState(() => value = 1.4);
+                      if (mounted) setState(() => editorLineHeight = 1.4);
+                      _applyEditorLineHeight(1.4);
+                    },
+                    icon: const Icon(Icons.restart_alt),
+                    label: const Text('بازگشت به پیش‌فرض'),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('انصراف'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('ذخیره'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result != true) {
+      setState(() => editorLineHeight = previous);
+      _applyEditorLineHeight(previous);
+      return;
+    }
+    try {
+      await repository.saveEditorLineHeight(editorLineHeight);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => editorLineHeight = previous);
+      _applyEditorLineHeight(previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ذخیره فاصله خطوط انجام نشد: $error')),
+      );
+    }
+  }
+
   Future<void> _loadEditorPreferences() async {
     final repository = NotebookRepository();
     editorDefaultFont = await repository.loadEditorFont();
     editorDefaultSize = await repository.loadEditorFontSize();
     editorHorizontalPadding = await repository.loadEditorHorizontalPadding();
     editorVerticalPadding = await repository.loadEditorVerticalPadding();
+    editorLineHeight = await repository.loadEditorLineHeight();
+    _applyEditorLineHeight(editorLineHeight);
     if (!mounted) return;
     if (widget.note == null) {
       // A new note inherits its font from the selected note theme, not the
@@ -2548,6 +2639,11 @@ class _EditorPageState extends State<EditorPage> {
                   icon: const Icon(Icons.format_indent_increase),
                   tooltip: 'تنظیم فاصله متن از کادر',
                   onPressed: _showEditorPaddingSettings,
+                ),
+                quill.QuillToolbarCustomButtonOptions(
+                  icon: const Icon(Icons.format_line_spacing),
+                  tooltip: 'تنظیم فاصله عمودی بین خطوط',
+                  onPressed: _showEditorLineHeightSettings,
                 ),
                 quill.QuillToolbarCustomButtonOptions(
                   icon: const Icon(Icons.add_photo_alternate_outlined),
