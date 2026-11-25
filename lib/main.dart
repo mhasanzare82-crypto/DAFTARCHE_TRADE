@@ -197,8 +197,6 @@ class _NotesPageState extends State<NotesPage> {
   bool showFullNoteCards = false;
   bool isBulkSelectionMode = false;
   final Set<String> selectedNoteIds = <String>{};
-  bool isBulkSelectionMode = false;
-  final Set<String> selectedNoteIds = <String>{};
   final customFonts=<String, String>{};
   final randomThemeNames=<String>{};
   final textColorPalette=<int>[];
@@ -1423,10 +1421,55 @@ class _NotesPageState extends State<NotesPage> {
             ],
           ),
         ] : [
-          IconButton(tooltip:showFullNoteCards?'نمایش خلاصه یادداشت‌ها':'نمایش کامل متن و تصاویر یادداشت‌ها',onPressed:_toggleCardDisplayMode,icon:Icon(showFullNoteCards?Icons.view_agenda_outlined:Icons.article_outlined)),
-          IconButton(tooltip:'انتخاب روش تغییر رنگ یادداشت‌ها',onPressed:_showNoteColorOptions,icon:const Icon(Icons.palette_outlined)),
-          PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),
-          IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined)),
+          PopupMenuButton<String>(
+            tooltip: 'امکانات بیشتر',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'display') _toggleCardDisplayMode();
+              if (value == 'colors') _showNoteColorOptions();
+              if (value == 'import') importDocx();
+              if (value == 'export') exportDocx(notes);
+              if (value == 'backup') createBackup();
+              if (value == 'restore') restoreBackup();
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'display',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(showFullNoteCards ? Icons.view_agenda_outlined : Icons.article_outlined),
+                  title: Text(showFullNoteCards ? 'نمایش خلاصه نوشته‌ها' : 'نمایش کامل متن و تصاویر'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'colors',
+                child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.palette_outlined), title: Text('تغییر رنگ نوشته‌ها')),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'import',
+                child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.file_open_outlined), title: Text('ورود فایل DOCX و TXT')),
+              ),
+              const PopupMenuItem(
+                value: 'export',
+                child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.file_download_outlined), title: Text('خروجی گروهی DOCX')),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'backup',
+                child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.backup_outlined), title: Text('ساخت فایل پشتیبان')),
+              ),
+              const PopupMenuItem(
+                value: 'restore',
+                child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.settings_backup_restore), title: Text('بازیابی فایل پشتیبان')),
+              ),
+            ],
+          ),
+          IconButton(
+            tooltip: 'تنظیمات رنگ و تم‌ها',
+            onPressed: manageThemes,
+            icon: const Icon(Icons.settings_outlined),
+          ),
         ],
       ),
       floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
