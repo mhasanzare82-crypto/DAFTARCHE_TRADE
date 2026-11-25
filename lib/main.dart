@@ -8,7 +8,7 @@ import 'package:archive/archive.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:xml/xml.dart';
+import 'services/docx_import_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -1034,112 +1034,6 @@ class _NotesPageState extends State<NotesPage> {
     }
   }
 
-  Future<Note?> _noteFromDocx(PlatformFile file) async {
-    final bytes = await file.readAsBytes();
-    final zip = ZipDecoder().decodeBytes(bytes, verify: true, throwOnError: true);
-    final documentFile = zip.findFile('word/document.xml');
-    if (documentFile == null) return null;
-    final xml = XmlDocument.parse(utf8.decode(documentFile.readBytes() ?? Uint8List(0), allowMalformed: true));
-    final relsFile = zip.findFile('word/_rels/document.xml.rels');
-    final relationships = <String, String>{};
-    if (relsFile != null) {
-      final rels = XmlDocument.parse(utf8.decode(relsFile.readBytes() ?? Uint8List(0), allowMalformed: true));
-      for (final rel in rels.descendants.whereType<XmlElement>().where((e) => e.name.local == 'Relationship')) {
-        final id = rel.attributes.where((a) => a.name.local == 'Id').map((a) => a.value).firstOrNull;
-        final target = rel.attributes.where((a) => a.name.local == 'Target').map((a) => a.value).firstOrNull;
-        if (id != null && target != null) relationships[id] = target;
-      }
-    }
-    final numberingFormats = <String, String>{};
-    final numberingFile = zip.findFile('word/numbering.xml');
-    if (numberingFile != null) {
-      final numberingXml = XmlDocument.parse(utf8.decode(numberingFile.readBytes() ?? Uint8List(0), allowMalformed: true));
-      final abstractFormats = <String, String>{};
-      for (final item in numberingXml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'abstractNum')) {
-        final abstractId = item.attributes.where((a) => a.name.local == 'abstractNumId').map((a) => a.value).firstOrNull;
-        final format = item.descendants.whereType<XmlElement>().where((e) => e.name.local == 'numFmt').firstOrNull?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
-        if (abstractId != null && format != null) abstractFormats[abstractId] = format;
-      }
-      for (final item in numberingXml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'num')) {
-        final numId = item.attributes.where((a) => a.name.local == 'numId').map((a) => a.value).firstOrNull;
-        final abstractId = item.descendants.whereType<XmlElement>().where((e) => e.name.local == 'abstractNumId').firstOrNull?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
-        if (numId != null && abstractId != null && abstractFormats.containsKey(abstractId)) numberingFormats[numId] = abstractFormats[abstractId]!;
-      }
-    }
-    final imageDirRoot = await getApplicationDocumentsDirectory();
-    final imageDir = Directory('${imageDirRoot.path}/notebook_images');
-    if (!await imageDir.exists()) await imageDir.create(recursive: true);
-    final operations = <Map<String, dynamic>>[];
-    final imagePaths = <String>[];
-    final paragraphs = xml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'p').toList();
-    // Preserve every paragraph as content; derive the note title from the filename.
-    for (final paragraph in paragraphs) {
-      final pPr = paragraph.children.whereType<XmlElement>().where((e) => e.name.local == 'pPr').firstOrNull;
-      final lineAttrs = <String, dynamic>{};
-      if (pPr != null) {
-        final style = pPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'pStyle').firstOrNull;
-        final styleVal = style?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull ?? '';
-        final heading = RegExp(r'Heading([1-3])', caseSensitive: false).firstMatch(styleVal);
-        if (heading != null) lineAttrs['header'] = int.parse(heading.group(1)!);
-        final jc = pPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'jc').firstOrNull;
-        final align = jc?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
-        if (align != null) lineAttrs['align'] = align;
-        final numId = pPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'numId').firstOrNull?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
-        if (numId != null) { final format = numberingFormats[numId]; lineAttrs['list'] = format == null || format == 'bullet' ? 'bullet' : 'ordered'; }
-      }
-      for (final run in paragraph.descendants.whereType<XmlElement>().where((e) => e.name.local == 'r')) {
-        final rPr = run.children.whereType<XmlElement>().where((e) => e.name.local == 'rPr').firstOrNull;
-        final attrs = <String, dynamic>{};
-        if (rPr != null) {
-          if (rPr.descendants.whereType<XmlElement>().any((e) => e.name.local == 'b')) attrs['bold'] = true;
-          if (rPr.descendants.whereType<XmlElement>().any((e) => e.name.local == 'i')) attrs['italic'] = true;
-          if (rPr.descendants.whereType<XmlElement>().any((e) => e.name.local == 'u')) attrs['underline'] = true;
-          if (rPr.descendants.whereType<XmlElement>().any((e) => e.name.local == 'strike')) attrs['strike'] = true;
-          final color = rPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'color').firstOrNull;
-          final colorValue = color?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
-          if (colorValue != null && RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(colorValue)) attrs['color'] = colorValue;
-          final shade = rPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'shd').firstOrNull;
-          final shadeValue = shade?.attributes.where((a) => a.name.local == 'fill').map((a) => a.value).firstOrNull;
-          if (shadeValue != null && RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(shadeValue)) attrs['background'] = shadeValue;
-          final size = rPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'sz').firstOrNull;
-          final sizeValue = size?.attributes.where((a) => a.name.local == 'val').map((a) => a.value).firstOrNull;
-          if (sizeValue != null) { final parsed = int.tryParse(sizeValue); if (parsed != null) attrs['size'] = (parsed / 2).toString(); }
-          final fonts = rPr.descendants.whereType<XmlElement>().where((e) => e.name.local == 'rFonts').firstOrNull;
-          final fontValue = fonts?.attributes.where((a) => a.name.local == 'ascii').map((a) => a.value).firstOrNull;
-          if (fontValue != null) attrs['font'] = fontValue;
-        }
-        for (final textElement in run.descendants.whereType<XmlElement>().where((e) => e.name.local == 't')) {
-          if (textElement.innerText.isNotEmpty) operations.add({'insert': textElement.innerText, if (attrs.isNotEmpty) 'attributes': attrs});
-        }
-        for (final blip in run.descendants.whereType<XmlElement>().where((e) => e.name.local == 'blip')) {
-          final rid = blip.attributes.where((a) => a.name.local == 'embed').map((a) => a.value).firstOrNull;
-          final target = rid == null ? null : relationships[rid];
-          if (target == null) continue;
-          final resolved = Uri.parse('word/document.xml').resolve(target).path;
-          final normalized = resolved.replaceAll('\\', '/').split('/').fold<String>('', (acc, part) {
-            if (part.isEmpty || part == '.') return acc;
-            if (part == '..') return acc.contains('/') ? acc.substring(0, acc.lastIndexOf('/')) : '';
-            return acc.isEmpty ? part : '$acc/$part';
-          });
-          final mediaFile = zip.findFile(normalized);
-          if (mediaFile == null) continue;
-          final ext = normalized.contains('.') ? normalized.substring(normalized.lastIndexOf('.')) : '.png';
-          final path = '${imageDir.path}/imported_${DateTime.now().microsecondsSinceEpoch}_${imagePaths.length}$ext';
-          final imageBytes = mediaFile.readBytes();
-          if (imageBytes == null || imageBytes.isEmpty) continue;
-          await File(path).writeAsBytes(imageBytes);
-          imagePaths.add(path);
-          operations.add({'insert': {'image': path}});
-        }
-      }
-      operations.add({'insert': '\n', if (lineAttrs.isNotEmpty) 'attributes': lineAttrs});
-    }
-    if (operations.isEmpty) operations.add({'insert': '\n'});
-    final id = DateTime.now().microsecondsSinceEpoch.toString();
-    final title = file.name.replaceFirst(RegExp(r'\.[^.]+$'), '');
-    return Note(id, title, '__quill_note_v1__${jsonEncode(operations)}', DateTime.now(), imagePaths);
-  }
-
   Future<Note> _noteFromTxt(PlatformFile file) async {
     final bytes = await file.readAsBytes();
     final text = utf8.decode(bytes, allowMalformed: true).replaceFirst('\uFEFF', '');
@@ -1152,28 +1046,76 @@ class _NotesPageState extends State<NotesPage> {
 
   Future<void> importDocx() async {
     try {
-      final files = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['docx', 'txt']);
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['docx', 'txt'],
+      );
       if (files.isEmpty) return;
+
+      final documentsDirectory = await getApplicationDocumentsDirectory();
+      final docxImporter = DocxImportService(
+        documentsDirectory: documentsDirectory,
+      );
       final imported = <Note>[];
-      final failures = <String>[];
+      final failures = <String, String>{};
+
       for (final file in files) {
         try {
-          final extension = (file.extension ?? file.name.split('.').last).toLowerCase();
-          final Note? note = extension == 'txt' ? await _noteFromTxt(file) : extension == 'docx' ? await _noteFromDocx(file) : null;
-          if (note != null) { imported.add(note); } else { failures.add(file.name); }
-        } catch (error) { debugPrint('File import failed for ${file.name}: $error'); failures.add(file.name); }
+          final extension =
+              (file.extension ?? file.name.split('.').last).toLowerCase();
+          final Note? note;
+          if (extension == 'txt') {
+            note = await _noteFromTxt(file);
+          } else if (extension == 'docx') {
+            note = await docxImporter.importBytes(
+              await file.readAsBytes(),
+              fileName: file.name,
+            );
+          } else {
+            note = null;
+          }
+
+          if (note == null) {
+            failures[file.name] = 'ساختار فایل قابل شناسایی نیست.';
+          } else {
+            imported.add(note);
+          }
+        } catch (error, stackTrace) {
+          debugPrint('File import failed for ${file.name}: $error\\n$stackTrace');
+          failures[file.name] = error.toString();
+        }
       }
-      if (imported.isNotEmpty) { setState(() => notes.addAll(imported)); await persist(); }
+
+      if (imported.isNotEmpty) {
+        final updatedNotes = <Note>[...notes, ...imported];
+        await repository.saveNotes(updatedNotes);
+        if (mounted) {
+          setState(() {
+            notes
+              ..clear()
+              ..addAll(updatedNotes);
+          });
+        }
+      }
+
+      if (!mounted) return;
+      final message = failures.isEmpty
+          ? '${imported.length} فایل با موفقیت به یادداشت تبدیل شد'
+          : imported.isEmpty
+              ? 'واردکردن فایل‌ها ناموفق بود: ${failures.keys.take(2).join('، ')}\\nعلت: ${failures.values.first}'
+              : '${imported.length} فایل وارد شد؛ ${failures.length} فایل ناموفق بود: ${failures.keys.take(2).join('، ')}\\nعلت: ${failures.values.first}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('File import selection/persistence failed: $error\\n$stackTrace');
       if (mounted) {
-        final message = failures.isEmpty ? '${imported.length} فایل با موفقیت به یادداشت تبدیل شد' : '${imported.length} فایل وارد شد؛ ${failures.length} فایل ناموفق بود: ${failures.take(2).join('، ')}';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ورود فایل‌ها انجام نشد: $error')),
+        );
       }
-    } catch (error) {
-      debugPrint('File import selection failed: $error');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ورود فایل‌ها انجام نشد: $error')));
     }
   }
-
   Future<void> createBackup() async {
     try {
       final imageData = <String, String>{};

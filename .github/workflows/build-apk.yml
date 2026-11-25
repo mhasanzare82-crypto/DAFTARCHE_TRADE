@@ -46,6 +46,11 @@ jobs:
             sleep 20
           done
 
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run DOCX import regression tests
+        run: flutter test test/services/docx_import_service_test.dart
       - name: Build release APK
         run: |
           for attempt in 1 2 3; do
