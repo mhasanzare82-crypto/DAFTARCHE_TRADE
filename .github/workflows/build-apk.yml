@@ -46,7 +46,7 @@ jobs:
             sleep 20
           done
 
-      - name: Build release APK
+      - name: Analyze\n        run: flutter analyze --no-fatal-infos --no-fatal-warnings\n\n      - name: Run DOCX import regression tests\n        run: flutter test test/services/docx_import_service_test.dart\n\n      - name: Build release APK
         run: |
           for attempt in 1 2 3; do
             flutter build apk --release --verbose && exit 0
