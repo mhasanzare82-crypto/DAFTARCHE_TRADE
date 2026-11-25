@@ -1436,11 +1436,25 @@ class _NotesPageState extends State<NotesPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => edit(),
-        tooltip: 'یادداشت جدید',
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add_rounded, size: 38),
+      floatingActionButton: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            heroTag: 'random-title-fab',
+            onPressed: _refreshRandomTitle,
+            tooltip: 'تغییر تصادفی عنوان',
+            shape: const CircleBorder(),
+            child: const Icon(Icons.shuffle_rounded, size: 25),
+          ),
+          const SizedBox(width: 12),
+          FloatingActionButton(
+            heroTag: 'new-note-fab',
+            onPressed: () => edit(),
+            tooltip: 'یادداشت جدید',
+            shape: const CircleBorder(),
+            child: const Icon(Icons.add_rounded, size: 38),
+          ),
+        ],
       ),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
