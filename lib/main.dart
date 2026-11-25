@@ -221,13 +221,6 @@ class _NotesPageState extends State<NotesPage> with WidgetsBindingObserver {
     }
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    search.dispose();
-    noteAudioPlayer.dispose();
-    super.dispose();
-  }
   Future<void> _loadCardDisplayMode() async { final saved = await repository.loadFullNoteCards(); if (mounted) setState(() => showFullNoteCards = saved); }
   Future<void> _toggleCardDisplayMode() async { final next = !showFullNoteCards; setState(() => showFullNoteCards = next); try { await repository.saveFullNoteCards(next); } catch (error) { if (!mounted) return; setState(() => showFullNoteCards = !next); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ذخیره حالت نمایش انجام نشد: $error'))); } }
   Future<void> load() async {
@@ -1373,7 +1366,12 @@ class _NotesPageState extends State<NotesPage> with WidgetsBindingObserver {
 
   String date(DateTime d)=>d.year.toString()+'/'+d.month.toString().padLeft(2,'0')+'/'+d.day.toString().padLeft(2,'0');
   @override
-  void dispose(){search.dispose();noteAudioPlayer.dispose();super.dispose();}
+  void dispose(){
+    WidgetsBinding.instance.removeObserver(this);
+    search.dispose();
+    noteAudioPlayer.dispose();
+    super.dispose();
+  }
   @override
   Widget build(BuildContext context){
     final items=filtered;
