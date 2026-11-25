@@ -184,7 +184,7 @@ class NotesPage extends StatefulWidget {
   @override
   State<NotesPage> createState() => _NotesPageState();
 }
-class _NotesPageState extends State<NotesPage> {
+class _NotesPageState extends State<NotesPage> with WidgetsBindingObserver {
   final NotebookRepository repository = NotebookRepository();
   final notes=<Note>[];
   final themes=<NoteTheme>[];
@@ -194,6 +194,7 @@ class _NotesPageState extends State<NotesPage> {
   final AudioPlayer noteAudioPlayer = AudioPlayer();
   String? currentlyPlayingAudio;
   String? selectedFolderId;
+  Note? randomTitleNote;
   bool loading=true;
   bool showFullNoteCards = false;
   bool isBulkSelectionMode = false;
@@ -204,7 +205,22 @@ class _NotesPageState extends State<NotesPage> {
   static const defaultThemes=[NoteTheme('یاسی',0xFFEDE7F6),NoteTheme('آبی',0xFFE3F2FD),NoteTheme('سبز',0xFFE8F5E9),NoteTheme('صورتی',0xFFFCE4EC),NoteTheme('هلویی',0xFFFFEAD5)];
 
   @override
-  void initState(){super.initState();search.addListener(()=>setState((){}));noteAudioPlayer.onPlayerComplete.listen((_){if(mounted)setState(()=>currentlyPlayingAudio=null);});_loadCardDisplayMode();load();}
+  void initState(){
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    search.addListener(()=>setState((){}));
+    noteAudioPlayer.onPlayerComplete.listen((_){if(mounted)setState(()=>currentlyPlayingAudio=null);});
+    _loadCardDisplayMode();
+    load();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !loading) {
+      _refreshRandomTitle();
+    }
+  }
+
   Future<void> _loadCardDisplayMode() async { final saved = await repository.loadFullNoteCards(); if (mounted) setState(() => showFullNoteCards = saved); }
   Future<void> _toggleCardDisplayMode() async { final next = !showFullNoteCards; setState(() => showFullNoteCards = next); try { await repository.saveFullNoteCards(next); } catch (error) { if (!mounted) return; setState(() => showFullNoteCards = !next); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ذخیره حالت نمایش انجام نشد: $error'))); } }
   Future<void> load() async {
@@ -234,6 +250,7 @@ class _NotesPageState extends State<NotesPage> {
       if (themes.isEmpty) themes.addAll(defaultThemes);
       if (randomThemeNames.isEmpty) randomThemeNames.addAll(themes.map((t) => t.name));
       if (mounted) setState(() => loading = false);
+      _refreshRandomTitle();
       await persistThemes();
       await repository.saveRandomThemeNames(randomThemeNames.toList());
     } catch (error, stackTrace) {
@@ -654,6 +671,21 @@ class _NotesPageState extends State<NotesPage> {
     if (cursor < value.length) spans.add(TextSpan(text: value.substring(cursor)));
     return TextSpan(style: baseStyle, children: spans);
   }
+  void _refreshRandomTitle() {
+    final titledNotes = notes.where((note) => note.title.trim().isNotEmpty).toList();
+    if (!mounted) return;
+    setState(() {
+      if (titledNotes.isEmpty) {
+        randomTitleNote = null;
+      } else {
+        final choices = titledNotes.length > 1 && randomTitleNote != null
+            ? titledNotes.where((note) => note.id != randomTitleNote!.id).toList()
+            : titledNotes;
+        randomTitleNote = choices[Random().nextInt(choices.length)];
+      }
+    });
+  }
+
   Future<void> edit([Note? note, String? searchTerm, int initialMatch = 0]) async {
     final availableThemes = themes.where((theme) => randomThemeNames.contains(theme.name)).toList();
     final themePool = availableThemes.isNotEmpty ? availableThemes : (themes.isEmpty ? defaultThemes : themes);
@@ -663,6 +695,7 @@ class _NotesPageState extends State<NotesPage> {
     final searchNoteIndex = searchNotes.indexWhere((n) => n.id == note?.id);
     final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(
       note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,
+      appFontFamily: widget.appFontFamily,
       existingNotes: List<Note>.of(notes),
       initialFolderId:note?.folderId??selectedFolderId,initialSearchTerm:query.isEmpty?null:query,
       searchNotes:searchNotes,initialSearchNoteIndex:searchNoteIndex<0?0:searchNoteIndex,
@@ -680,9 +713,13 @@ class _NotesPageState extends State<NotesPage> {
         if (mounted) await edit(target, query, targetMatch);
       },
     )));
-    if(result==null)return;
+    if(result==null) {
+      _refreshRandomTitle();
+      return;
+    }
     setState(() { final i=notes.indexWhere((n)=>n.id==result.id); if(i<0){notes.add(result);}else{notes[i]=result;} });
     await persist();
+    _refreshRandomTitle();
   }
   Future<void> remove(Note n) async {
     final yes=await showDialog<bool>(context:context,builder:(c)=>AlertDialog(
@@ -826,7 +863,7 @@ class _NotesPageState extends State<NotesPage> {
                   child: Icon(Icons.text_fields, color: Color(item.textColor)),
                 ),
                 title: Text(item.name, style: TextStyle(
-                  color: Color(item.textColor), fontFamily: item.fontFamily,
+                  color: Color(item.textColor), fontFamily: widget.appFontFamily,
                 )),
                 subtitle: const Text('پس‌زمینه، رنگ متن و فونت'),
                 onTap: () => Navigator.pop(dialogContext, item),
@@ -1266,7 +1303,7 @@ class _NotesPageState extends State<NotesPage> {
                   ),
                   title: Text(theme.name, style: TextStyle(
                     color: Color(theme.textColor),
-                    fontFamily: theme.fontFamily,
+                    fontFamily: widget.appFontFamily,
                   )),
                   subtitle: Text('پس‌زمینه و رنگ متن این تم'),
                   trailing: note.themeColor == theme.backgroundColor &&
@@ -1329,11 +1366,17 @@ class _NotesPageState extends State<NotesPage> {
 
   String date(DateTime d)=>d.year.toString()+'/'+d.month.toString().padLeft(2,'0')+'/'+d.day.toString().padLeft(2,'0');
   @override
-  void dispose(){search.dispose();noteAudioPlayer.dispose();super.dispose();}
+  void dispose(){
+    WidgetsBinding.instance.removeObserver(this);
+    search.dispose();
+    noteAudioPlayer.dispose();
+    super.dispose();
+  }
   @override
   Widget build(BuildContext context){
     final items=filtered;
     return Directionality(textDirection:TextDirection.rtl,child:Scaffold(
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       appBar:AppBar(
         title: isBulkSelectionMode
             ? Text('${_selectedNotesInView(items).length} نوشته انتخاب شده')
@@ -1415,14 +1458,81 @@ class _NotesPageState extends State<NotesPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => edit(),
-        tooltip: 'یادداشت جدید',
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add_rounded, size: 38),
+      floatingActionButton: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            heroTag: 'random-title-fab',
+            onPressed: _refreshRandomTitle,
+            tooltip: 'تغییر تصادفی عنوان',
+            shape: const CircleBorder(),
+            child: const Icon(Icons.shuffle_rounded, size: 25),
+          ),
+          const SizedBox(width: 12),
+          FloatingActionButton(
+            heroTag: 'new-note-fab',
+            onPressed: () => edit(),
+            tooltip: 'یادداشت جدید',
+            shape: const CircleBorder(),
+            child: const Icon(Icons.add_rounded, size: 38),
+          ),
+        ],
       ),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          if (!loading && randomTitleNote != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Material(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(.72),
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => edit(randomTitleNote),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(.18),
+                      ),
+                      gradient: LinearGradient(
+                        begin: Alignment.centerRight,
+                        end: Alignment.centerLeft,
+                        colors: [
+                          Theme.of(context).colorScheme.primary.withOpacity(.09),
+                          Theme.of(context).colorScheme.surface.withOpacity(.35),
+                        ],
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.auto_awesome_rounded,
+                          size: 19,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                randomTitleNote!.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: widget.appFontFamily),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           Row(
             children: [
               IconButton(
@@ -1484,7 +1594,14 @@ class _NotesPageState extends State<NotesPage> {
                       color: selectedFolderId == folder.id ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(folder.name),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.folder_outlined, size: 18),
+                        const SizedBox(width: 6),
+                        Text(folder.name),
+                      ],
+                    ),
                   ),
                 ),
               )),
@@ -1543,7 +1660,7 @@ class _NotesPageState extends State<NotesPage> {
                 text:_highlightSearchText(
                   showFullNoteCards ? _notePlainText(n.body) : _searchPreviewLines(_notePlainText(n.body),search.text),
                   search.text,
-                  TextStyle(color:Color(n.themeTextColor),fontFamily:widget.appFontFamily),
+                  TextStyle(color:Color(n.themeTextColor),fontSize:16,fontFamily:widget.appFontFamily),
                 ),
                 maxLines:showFullNoteCards ? null : 3,
                 overflow:showFullNoteCards ? TextOverflow.visible : TextOverflow.ellipsis,
@@ -1760,6 +1877,7 @@ class EditorPage extends StatefulWidget {
   final List<NoteTheme> themes;
   final List<String> customFonts;
   final NoteTheme initialTheme;
+  final String appFontFamily;
   final List<Note> existingNotes;
   final String? initialFolderId;
   final String? initialSearchTerm;
@@ -1767,7 +1885,7 @@ class EditorPage extends StatefulWidget {
   final int initialSearchNoteIndex;
   final int initialSearchMatch;
   final Future<void> Function(Note?, int, int)? onSearchNavigate;
-  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme,this.existingNotes = const [], this.initialFolderId, this.initialSearchTerm, this.searchNotes = const [], this.initialSearchNoteIndex = 0, this.initialSearchMatch = 0, this.onSearchNavigate});
+  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme,required this.appFontFamily,this.existingNotes = const [], this.initialFolderId, this.initialSearchTerm, this.searchNotes = const [], this.initialSearchNoteIndex = 0, this.initialSearchMatch = 0, this.onSearchNavigate});
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
@@ -1872,7 +1990,8 @@ class _EditorPageState extends State<EditorPage> {
     }
     themeColor = widget.note?.themeColor ?? widget.initialTheme.backgroundColor;
     themeTextColor = widget.note?.themeTextColor ?? widget.initialTheme.textColor;
-    themeFontFamily = widget.note?.themeFontFamily ?? widget.initialTheme.fontFamily;
+    // The global UI font is authoritative, including existing note content.
+    themeFontFamily = widget.appFontFamily;
     folderId = widget.note?.folderId ?? widget.initialFolderId;
     audioPaths.addAll(widget.note?.audios ?? const []);
     _loadEditorPreferences();
@@ -2118,20 +2237,22 @@ class _EditorPageState extends State<EditorPage> {
 
   Future<void> _loadEditorPreferences() async {
     final repository = NotebookRepository();
-    editorDefaultFont = await repository.loadEditorFont();
+    // Use the same global font in the editor; retain the saved size preference.
+    editorDefaultFont = widget.appFontFamily;
     editorDefaultSize = await repository.loadEditorFontSize();
     editorHorizontalPadding = await repository.loadEditorHorizontalPadding();
     editorVerticalPadding = await repository.loadEditorVerticalPadding();
     editorLineHeight = await repository.loadEditorLineHeight();
     _applyEditorLineHeight(editorLineHeight);
     if (!mounted) return;
-    if (widget.note == null) {
-      // A new note inherits its font from the selected note theme, not the
-      // editor's last-used formatting preference.
-      final themeFont = quill.Attribute.fromKeyValue('font', themeFontFamily);
-      controller.formatSelection(themeFont);
-      if (controller.document.length > 1) {
-        controller.formatText(0, controller.document.length - 1, themeFont);
+    // Apply the selected global UI font to all existing text and new input.
+    // Quill's other formatting attributes (color, size, bold, alignment, etc.)
+    // remain untouched.
+    final globalFont = quill.Attribute.fromKeyValue('font', widget.appFontFamily);
+    controller.formatSelection(globalFont);
+    if (controller.document.length > 1) {
+      controller.formatText(0, controller.document.length - 1, globalFont);
+      if (widget.note == null) {
         controller.formatText(0, controller.document.length - 1,
             quill.Attribute.fromKeyValue('size', editorDefaultSize.toString()));
       }
@@ -2263,19 +2384,18 @@ class _EditorPageState extends State<EditorPage> {
                     shrinkWrap: true,
                     children: available.map((theme) {
                       final isSelected = themeColor == theme.backgroundColor &&
-                          themeTextColor == theme.textColor &&
-                          themeFontFamily == theme.fontFamily;
+                          themeTextColor == theme.textColor;
                       return Card(
                         color: Color(theme.backgroundColor),
                         child: ListTile(
                           title: Text(theme.name, style: TextStyle(
                             color: Color(theme.textColor),
-                            fontFamily: theme.fontFamily,
+                            fontFamily: widget.appFontFamily,
                             fontWeight: FontWeight.w600,
                           )),
                           subtitle: Text('نمونه متن یادداشت', style: TextStyle(
                             color: Color(theme.textColor),
-                            fontFamily: theme.fontFamily,
+                            fontFamily: widget.appFontFamily,
                           )),
                           trailing: isSelected
                               ? Icon(Icons.check_circle, color: Color(theme.textColor))
@@ -2296,11 +2416,9 @@ class _EditorPageState extends State<EditorPage> {
     setState(() {
       themeColor = selected.backgroundColor;
       themeTextColor = selected.textColor;
-      themeFontFamily = selected.fontFamily;
-      // Apply the selected theme font to existing text and to the insertion
-      // style, so typing immediately uses the theme font as well.
-      final fontAttribute =
-          quill.Attribute.fromKeyValue('font', themeFontFamily);
+      // Theme selection changes note colors; the global UI font stays fixed.
+      themeFontFamily = widget.appFontFamily;
+      final fontAttribute = quill.Attribute.fromKeyValue('font', widget.appFontFamily);
       if (controller.document.length > 1) {
         controller.formatText(0, controller.document.length - 1, fontAttribute);
       }
