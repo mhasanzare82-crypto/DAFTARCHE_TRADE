@@ -195,6 +195,8 @@ class _NotesPageState extends State<NotesPage> {
   String? selectedFolderId;
   bool loading=true;
   bool showFullNoteCards = false;
+  bool isBulkSelectionMode = false;
+  final Set<String> selectedNoteIds = <String>{};
   final customFonts=<String, String>{};
   final randomThemeNames=<String>{};
   final textColorPalette=<int>[];
@@ -688,6 +690,230 @@ class _NotesPageState extends State<NotesPage> {
     if(yes==true){setState(()=>notes.removeWhere((x)=>x.id==n.id));await persist();}
   }
 
+
+  List<Note> _selectedNotesInView(List<Note> visible) =>
+      visible.where((n) => selectedNoteIds.contains(n.id)).toList();
+
+  void _toggleBulkSelection(Note note) {
+    setState(() {
+      isBulkSelectionMode = true;
+      if (!selectedNoteIds.add(note.id)) selectedNoteIds.remove(note.id);
+      if (selectedNoteIds.isEmpty) isBulkSelectionMode = false;
+    });
+  }
+
+  void _clearBulkSelection() {
+    setState(() {
+      selectedNoteIds.clear();
+      isBulkSelectionMode = false;
+    });
+  }
+
+  void _toggleSelectAll(List<Note> visible) {
+    setState(() {
+      final allSelected = visible.isNotEmpty &&
+          visible.every((note) => selectedNoteIds.contains(note.id));
+      if (allSelected) {
+        selectedNoteIds.removeAll(visible.map((note) => note.id));
+      } else {
+        selectedNoteIds.addAll(visible.map((note) => note.id));
+      }
+      isBulkSelectionMode = selectedNoteIds.isNotEmpty;
+    });
+  }
+
+  Future<void> _deleteSelectedNotes(List<Note> visible) async {
+    final selected = _selectedNotesInView(visible);
+    if (selected.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('حذف گروهی نوشته‌ها؟'),
+          content: Text('تعداد ${selected.length} نوشته برای همیشه حذف می‌شود. ادامه می‌دهی؟'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف نوشته‌ها')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ids = selected.map((note) => note.id).toSet();
+    setState(() {
+      notes.removeWhere((note) => ids.contains(note.id));
+      selectedNoteIds.clear();
+      isBulkSelectionMode = false;
+    });
+    await persist();
+  }
+
+  Future<String?> _chooseBulkDestination() {
+    return showDialog<String?>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('انتقال نوشته‌های انتخاب‌شده'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.inbox_outlined),
+                  title: const Text('بدون پوشه'),
+                  onTap: () => Navigator.pop(dialogContext, ''),
+                ),
+                ...folders.map((folder) => ListTile(
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text(folder.name),
+                  onTap: () => Navigator.pop(dialogContext, folder.id),
+                )),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _moveSelectedNotes(List<Note> visible) async {
+    final selected = _selectedNotesInView(visible);
+    if (selected.isEmpty) return;
+    final destination = await _chooseBulkDestination();
+    if (destination == null || !mounted) return;
+    final folderId = destination.isEmpty ? null : destination;
+    final ids = selected.map((note) => note.id).toSet();
+    setState(() {
+      for (var index = 0; index < notes.length; index++) {
+        final note = notes[index];
+        if (!ids.contains(note.id)) continue;
+        notes[index] = Note(
+          note.id, note.title, note.body, DateTime.now(),
+          List<String>.of(note.images), note.themeColor, note.themeTextColor,
+          note.themeFontFamily, folderId, List<String>.of(note.audios),
+        );
+      }
+      selectedNoteIds.clear();
+      isBulkSelectionMode = false;
+    });
+    await persist();
+  }
+
+  Future<void> _applyThemeToSelectedNotes(List<Note> visible) async {
+    final selected = _selectedNotesInView(visible);
+    if (selected.isEmpty) return;
+    final choices = themes.isEmpty ? defaultThemes : List<NoteTheme>.of(themes);
+    final theme = await showDialog<NoteTheme>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('انتخاب تم برای نوشته‌های انتخاب‌شده'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: choices.map((item) => ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Color(item.backgroundColor),
+                  child: Icon(Icons.text_fields, color: Color(item.textColor)),
+                ),
+                title: Text(item.name, style: TextStyle(
+                  color: Color(item.textColor), fontFamily: item.fontFamily,
+                )),
+                subtitle: const Text('پس‌زمینه، رنگ متن و فونت'),
+                onTap: () => Navigator.pop(dialogContext, item),
+              )).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')),
+          ],
+        ),
+      ),
+    );
+    if (theme == null || !mounted) return;
+    final ids = selected.map((note) => note.id).toSet();
+    setState(() {
+      for (var index = 0; index < notes.length; index++) {
+        final note = notes[index];
+        if (!ids.contains(note.id)) continue;
+        notes[index] = Note(
+          note.id, note.title, note.body, DateTime.now(),
+          List<String>.of(note.images), theme.backgroundColor, theme.textColor,
+          theme.fontFamily, note.folderId, List<String>.of(note.audios),
+        );
+      }
+      selectedNoteIds.clear();
+      isBulkSelectionMode = false;
+    });
+    await persist();
+  }
+
+  String _safeDocxFileName(String title) {
+    final value = title.trim().isEmpty ? 'بدون عنوان' : title.trim();
+    final safe = value
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'[. ]+$'), '')
+        .trim();
+    return safe.isEmpty ? 'بدون عنوان' : safe;
+  }
+
+  Future<void> _exportSelectedNotesSeparately(List<Note> visible) async {
+    final selected = _selectedNotesInView(visible);
+    if (selected.isEmpty) return;
+    try {
+      final path = await FilePicker.getDirectoryPath(
+        dialogTitle: 'انتخاب پوشه ذخیره فایل‌های Word',
+      );
+      if (path == null || path.isEmpty || !mounted) return;
+      final directory = Directory(path);
+      if (!await directory.exists()) {
+        throw FileSystemException('پوشه انتخاب‌شده در دسترس نیست.', path);
+      }
+      final usedNames = <String>{};
+      var exported = 0;
+      final failures = <String>[];
+      for (final note in selected) {
+        final baseName = _safeDocxFileName(note.title);
+        var fileName = '$baseName.docx';
+        var suffix = 2;
+        while (usedNames.contains(fileName.toLowerCase()) ||
+            await File('${directory.path}/$fileName').exists()) {
+          fileName = '${baseName}_$suffix.docx';
+          suffix++;
+        }
+        usedNames.add(fileName.toLowerCase());
+        try {
+          final bytes = await _buildDocx(<Note>[note]);
+          await File('${directory.path}/$fileName').writeAsBytes(bytes, flush: true);
+          exported++;
+        } catch (error) {
+          failures.add(note.title.isEmpty ? 'بدون عنوان' : note.title);
+          debugPrint('DOCX export failed for ${note.id}: $error');
+        }
+      }
+      if (!mounted) return;
+      final message = failures.isEmpty
+          ? '$exported فایل Word جداگانه ذخیره شد.'
+          : '$exported فایل ذخیره شد؛ ${failures.length} نوشته ناموفق بود.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      if (failures.isEmpty) _clearBulkSelection();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خروجی گروهی Word انجام نشد: $error')),
+        );
+      }
+    }
+  }
+
   String _xmlEscape(String value) => value.replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;').replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;').replaceAll("'", '&apos;');
@@ -1165,7 +1391,87 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context){
     final items=filtered;
     return Directionality(textDirection:TextDirection.rtl,child:Scaffold(
-      appBar:AppBar(actions:[IconButton(tooltip:showFullNoteCards?'نمایش خلاصه یادداشت‌ها':'نمایش کامل متن و تصاویر یادداشت‌ها',onPressed:_toggleCardDisplayMode,icon:Icon(showFullNoteCards?Icons.view_agenda_outlined:Icons.article_outlined)),IconButton(tooltip:'انتخاب روش تغییر رنگ یادداشت‌ها',onPressed:_showNoteColorOptions,icon:const Icon(Icons.palette_outlined)),PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined))]),
+      appBar:AppBar(
+        title: isBulkSelectionMode
+            ? Text('${_selectedNotesInView(items).length} نوشته انتخاب شده')
+            : null,
+        leading: isBulkSelectionMode
+            ? IconButton(tooltip: 'خروج از انتخاب گروهی', onPressed: _clearBulkSelection, icon: const Icon(Icons.close))
+            : null,
+        actions: isBulkSelectionMode ? [
+          IconButton(
+            tooltip: 'انتخاب همه نوشته‌های این بخش',
+            onPressed: () => _toggleSelectAll(items),
+            icon: Icon(items.isNotEmpty && items.every((n) => selectedNoteIds.contains(n.id))
+                ? Icons.deselect : Icons.select_all),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'عملیات گروهی',
+            onSelected: (action) {
+              if (action == 'delete') _deleteSelectedNotes(items);
+              if (action == 'move') _moveSelectedNotes(items);
+              if (action == 'export') _exportSelectedNotesSeparately(items);
+              if (action == 'theme') _applyThemeToSelectedNotes(items);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline, color: Colors.red), title: Text('حذف گروهی'))),
+              PopupMenuItem(value: 'move', child: ListTile(leading: Icon(Icons.drive_file_move_outline), title: Text('انتقال به پوشه'))),
+              PopupMenuItem(value: 'export', child: ListTile(leading: Icon(Icons.file_download_outlined), title: Text('خروجی جداگانه DOCX'))),
+              PopupMenuItem(value: 'theme', child: ListTile(leading: Icon(Icons.palette_outlined), title: Text('تغییر تم گروهی'))),
+            ],
+          ),
+        ] : [
+          PopupMenuButton<String>(
+            tooltip: 'امکانات بیشتر',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'display') _toggleCardDisplayMode();
+              if (value == 'colors') _showNoteColorOptions();
+              if (value == 'import') importDocx();
+              if (value == 'export') exportDocx(notes);
+              if (value == 'backup') createBackup();
+              if (value == 'restore') restoreBackup();
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'display',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(showFullNoteCards ? Icons.view_agenda_outlined : Icons.article_outlined),
+                  title: Text(showFullNoteCards ? 'نمایش خلاصه نوشته‌ها' : 'نمایش کامل متن و تصاویر'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'colors',
+                child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.palette_outlined), title: Text('تغییر رنگ نوشته‌ها')),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'import',
+                child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.file_open_outlined), title: Text('ورود فایل DOCX و TXT')),
+              ),
+              const PopupMenuItem(
+                value: 'export',
+                child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.file_download_outlined), title: Text('خروجی گروهی DOCX')),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'backup',
+                child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.backup_outlined), title: Text('ساخت فایل پشتیبان')),
+              ),
+              const PopupMenuItem(
+                value: 'restore',
+                child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.settings_backup_restore), title: Text('بازیابی فایل پشتیبان')),
+              ),
+            ],
+          ),
+          IconButton(
+            tooltip: 'تنظیمات رنگ و تم‌ها',
+            onPressed: manageThemes,
+            icon: const Icon(Icons.settings_outlined),
+          ),
+        ],
+      ),
       floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -1178,7 +1484,7 @@ class _NotesPageState extends State<NotesPage> {
                 padding: const EdgeInsets.only(left: 8),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () => setState(() => selectedFolderId = null),
+                  onTap: () => setState(() { selectedFolderId = null; selectedNoteIds.clear(); isBulkSelectionMode = false; }),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     decoration: BoxDecoration(
@@ -1193,7 +1499,7 @@ class _NotesPageState extends State<NotesPage> {
                 padding: const EdgeInsets.only(left: 8),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () => setState(() => selectedFolderId = folder.id),
+                  onTap: () => setState(() { selectedFolderId = folder.id; selectedNoteIds.clear(); isBulkSelectionMode = false; }),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     decoration: BoxDecoration(
@@ -1228,8 +1534,33 @@ class _NotesPageState extends State<NotesPage> {
               : const SizedBox.shrink())
           :ListView.separated(padding:const EdgeInsets.fromLTRB(20,0,20,100),itemCount:items.length,separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(_,i){
             final n=items[i];
-            return Card(elevation:0,color:Color(n.themeColor),child:InkWell(onTap:()=>edit(n,search.text.trim().isEmpty||!_notePlainText(n.body).toLowerCase().contains(search.text.trim().toLowerCase())?null:search.text.trim()),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Row(children:[Expanded(child:RichText(text:_highlightSearchText(n.title.isEmpty?'بدون عنوان':n.title,search.text,TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),maxLines:1,overflow:TextOverflow.ellipsis)),IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))]),
+            final isSelected = selectedNoteIds.contains(n.id);
+            return Card(
+              elevation: isSelected ? 2 : 0,
+              color: Color(n.themeColor),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: isSelected ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 2) : BorderSide.none,
+              ),
+              child: InkWell(
+                onLongPress: () => _toggleBulkSelection(n),
+                onTap: () {
+                  if (isBulkSelectionMode) {
+                    _toggleBulkSelection(n);
+                  } else {
+                    edit(n,search.text.trim().isEmpty||!_notePlainText(n.body).toLowerCase().contains(search.text.trim().toLowerCase())?null:search.text.trim());
+                  }
+                },
+                child: Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Row(children:[
+                if (isBulkSelectionMode)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked, color: Color(n.themeTextColor)),
+                  ),
+                Expanded(child:RichText(text:_highlightSearchText(n.title.isEmpty?'بدون عنوان':n.title,search.text,TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),maxLines:1,overflow:TextOverflow.ellipsis)),
+                if (!isBulkSelectionMode) IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))
+              ]),
               if(_notePlainText(n.body).isNotEmpty)RichText(
                 text:_highlightSearchText(
                   showFullNoteCards ? _notePlainText(n.body) : _searchPreviewLines(_notePlainText(n.body),search.text),
