@@ -190,6 +190,7 @@ class _NotesPageState extends State<NotesPage> {
   final themes=<NoteTheme>[];
   final folders=<NoteFolder>[];
   final search=TextEditingController();
+  bool isSearchExpanded = false;
   final AudioPlayer noteAudioPlayer = AudioPlayer();
   String? currentlyPlayingAudio;
   String? selectedFolderId;
@@ -1475,7 +1476,37 @@ class _NotesPageState extends State<NotesPage> {
       floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          TextField(controller:search,decoration:InputDecoration(hintText:'جستجو در یادداشت‌ها...',filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(16),borderSide:BorderSide.none))),
+          Row(
+            children: [
+              IconButton(
+                tooltip: isSearchExpanded ? 'بستن جستجو' : 'جستجو',
+                onPressed: () {
+                  setState(() {
+                    isSearchExpanded = !isSearchExpanded;
+                    if (!isSearchExpanded) search.clear();
+                  });
+                },
+                icon: const Icon(Icons.search_rounded),
+              ),
+              if (isSearchExpanded)
+                Expanded(
+                  child: TextField(
+                    controller: search,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: 'جستجو در یادداشت‌ها...',
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height:14),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
