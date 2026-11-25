@@ -57,6 +57,20 @@ class NotebookRepository {
     return prefs.getString(_appFontKey);
   }
 
+  static const _fullNoteCardsKey = 'notebook_full_note_cards';
+
+  Future<bool> loadFullNoteCards() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_fullNoteCardsKey) ?? false;
+  }
+
+  Future<void> saveFullNoteCards(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setBool(_fullNoteCardsKey, value)) {
+      throw StateError('Unable to persist full note card display mode');
+    }
+  }
+
   Future<void> saveAppFont(String family) async {
     final prefs = await SharedPreferences.getInstance();
     final success = await prefs.setString(_appFontKey, family);
