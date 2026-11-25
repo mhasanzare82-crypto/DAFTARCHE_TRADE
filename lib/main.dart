@@ -827,7 +827,7 @@ class _NotesPageState extends State<NotesPage> {
                   child: Icon(Icons.text_fields, color: Color(item.textColor)),
                 ),
                 title: Text(item.name, style: TextStyle(
-                  color: Color(item.textColor), fontFamily: item.fontFamily,
+                  color: Color(item.textColor), fontFamily: widget.appFontFamily,
                 )),
                 subtitle: const Text('پس‌زمینه، رنگ متن و فونت'),
                 onTap: () => Navigator.pop(dialogContext, item),
@@ -1267,7 +1267,7 @@ class _NotesPageState extends State<NotesPage> {
                   ),
                   title: Text(theme.name, style: TextStyle(
                     color: Color(theme.textColor),
-                    fontFamily: theme.fontFamily,
+                    fontFamily: widget.appFontFamily,
                   )),
                   subtitle: Text('پس‌زمینه و رنگ متن این تم'),
                   trailing: note.themeColor == theme.backgroundColor &&
@@ -2269,8 +2269,7 @@ class _EditorPageState extends State<EditorPage> {
                     shrinkWrap: true,
                     children: available.map((theme) {
                       final isSelected = themeColor == theme.backgroundColor &&
-                          themeTextColor == theme.textColor &&
-                          themeFontFamily == theme.fontFamily;
+                          themeTextColor == theme.textColor;
                       return Card(
                         color: Color(theme.backgroundColor),
                         child: ListTile(
