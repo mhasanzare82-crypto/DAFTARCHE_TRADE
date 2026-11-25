@@ -39,6 +39,7 @@ class NotebookRepository {
 
   static const _editorHorizontalPaddingKey = 'notebook_editor_horizontal_padding';
   static const _editorVerticalPaddingKey = 'notebook_editor_vertical_padding';
+  static const _editorLineHeightKey = 'notebook_editor_line_height';
 
   Future<double> loadEditorHorizontalPadding() async {
     final prefs = await SharedPreferences.getInstance();
@@ -48,6 +49,17 @@ class NotebookRepository {
   Future<double> loadEditorVerticalPadding() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getDouble(_editorVerticalPaddingKey) ?? 14.0;
+  }
+
+  Future<double> loadEditorLineHeight() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_editorLineHeightKey) ?? 1.4;
+  }
+
+  Future<void> saveEditorLineHeight(double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = await prefs.setDouble(_editorLineHeightKey, value);
+    if (!saved) throw StateError('Unable to persist editor line height');
   }
 
   Future<void> saveEditorPadding({required double horizontal, required double vertical}) async {
