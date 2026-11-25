@@ -1484,7 +1484,14 @@ class _NotesPageState extends State<NotesPage> {
                       color: selectedFolderId == folder.id ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(folder.name),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.folder_outlined, size: 18),
+                        const SizedBox(width: 6),
+                        Text(folder.name),
+                      ],
+                    ),
                   ),
                 ),
               )),
