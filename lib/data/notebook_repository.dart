@@ -37,6 +37,28 @@ class NotebookRepository {
     }
   }
 
+  static const _editorHorizontalPaddingKey = 'notebook_editor_horizontal_padding';
+  static const _editorVerticalPaddingKey = 'notebook_editor_vertical_padding';
+
+  Future<double> loadEditorHorizontalPadding() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_editorHorizontalPaddingKey) ?? 16.0;
+  }
+
+  Future<double> loadEditorVerticalPadding() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_editorVerticalPaddingKey) ?? 14.0;
+  }
+
+  Future<void> saveEditorPadding({required double horizontal, required double vertical}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final horizontalSaved = await prefs.setDouble(_editorHorizontalPaddingKey, horizontal);
+    final verticalSaved = await prefs.setDouble(_editorVerticalPaddingKey, vertical);
+    if (!horizontalSaved || !verticalSaved) {
+      throw StateError('Unable to persist editor padding');
+    }
+  }
+
   Future<List<Note>> loadNotes() async {
     final prefs = await SharedPreferences.getInstance();
     return _decodeList(prefs.getString(_notesKey), Note.fromJson);
