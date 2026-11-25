@@ -680,6 +680,7 @@ class _NotesPageState extends State<NotesPage> {
     final searchNoteIndex = searchNotes.indexWhere((n) => n.id == note?.id);
     final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(
       note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,
+      appFontFamily: widget.appFontFamily,
       existingNotes: List<Note>.of(notes),
       initialFolderId:note?.folderId??selectedFolderId,initialSearchTerm:query.isEmpty?null:query,
       searchNotes:searchNotes,initialSearchNoteIndex:searchNoteIndex<0?0:searchNoteIndex,
@@ -1508,7 +1509,7 @@ class _NotesPageState extends State<NotesPage> {
                                 randomTitleNote!.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: widget.appFontFamily),
                               ),
                             ],
                           ),
@@ -1651,7 +1652,7 @@ class _NotesPageState extends State<NotesPage> {
                 text:_highlightSearchText(
                   showFullNoteCards ? _notePlainText(n.body) : _searchPreviewLines(_notePlainText(n.body),search.text),
                   search.text,
-                  TextStyle(color:Color(n.themeTextColor),fontFamily:widget.appFontFamily),
+                  TextStyle(color:Color(n.themeTextColor),fontSize:16,fontFamily:widget.appFontFamily),
                 ),
                 maxLines:showFullNoteCards ? null : 3,
                 overflow:showFullNoteCards ? TextOverflow.visible : TextOverflow.ellipsis,
@@ -1868,6 +1869,7 @@ class EditorPage extends StatefulWidget {
   final List<NoteTheme> themes;
   final List<String> customFonts;
   final NoteTheme initialTheme;
+  final String appFontFamily;
   final List<Note> existingNotes;
   final String? initialFolderId;
   final String? initialSearchTerm;
@@ -1875,7 +1877,7 @@ class EditorPage extends StatefulWidget {
   final int initialSearchNoteIndex;
   final int initialSearchMatch;
   final Future<void> Function(Note?, int, int)? onSearchNavigate;
-  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme,this.existingNotes = const [], this.initialFolderId, this.initialSearchTerm, this.searchNotes = const [], this.initialSearchNoteIndex = 0, this.initialSearchMatch = 0, this.onSearchNavigate});
+  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme,required this.appFontFamily,this.existingNotes = const [], this.initialFolderId, this.initialSearchTerm, this.searchNotes = const [], this.initialSearchNoteIndex = 0, this.initialSearchMatch = 0, this.onSearchNavigate});
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
@@ -1980,7 +1982,8 @@ class _EditorPageState extends State<EditorPage> {
     }
     themeColor = widget.note?.themeColor ?? widget.initialTheme.backgroundColor;
     themeTextColor = widget.note?.themeTextColor ?? widget.initialTheme.textColor;
-    themeFontFamily = widget.note?.themeFontFamily ?? widget.initialTheme.fontFamily;
+    // The global UI font is authoritative, including existing note content.
+    themeFontFamily = widget.appFontFamily;
     folderId = widget.note?.folderId ?? widget.initialFolderId;
     audioPaths.addAll(widget.note?.audios ?? const []);
     _loadEditorPreferences();
@@ -2226,20 +2229,22 @@ class _EditorPageState extends State<EditorPage> {
 
   Future<void> _loadEditorPreferences() async {
     final repository = NotebookRepository();
-    editorDefaultFont = await repository.loadEditorFont();
+    // Use the same global font in the editor; retain the saved size preference.
+    editorDefaultFont = widget.appFontFamily;
     editorDefaultSize = await repository.loadEditorFontSize();
     editorHorizontalPadding = await repository.loadEditorHorizontalPadding();
     editorVerticalPadding = await repository.loadEditorVerticalPadding();
     editorLineHeight = await repository.loadEditorLineHeight();
     _applyEditorLineHeight(editorLineHeight);
     if (!mounted) return;
-    if (widget.note == null) {
-      // A new note inherits its font from the selected note theme, not the
-      // editor's last-used formatting preference.
-      final themeFont = quill.Attribute.fromKeyValue('font', themeFontFamily);
-      controller.formatSelection(themeFont);
-      if (controller.document.length > 1) {
-        controller.formatText(0, controller.document.length - 1, themeFont);
+    // Apply the selected global UI font to all existing text and new input.
+    // Quill's other formatting attributes (color, size, bold, alignment, etc.)
+    // remain untouched.
+    final globalFont = quill.Attribute.fromKeyValue('font', widget.appFontFamily);
+    controller.formatSelection(globalFont);
+    if (controller.document.length > 1) {
+      controller.formatText(0, controller.document.length - 1, globalFont);
+      if (widget.note == null) {
         controller.formatText(0, controller.document.length - 1,
             quill.Attribute.fromKeyValue('size', editorDefaultSize.toString()));
       }
@@ -2372,18 +2377,18 @@ class _EditorPageState extends State<EditorPage> {
                     children: available.map((theme) {
                       final isSelected = themeColor == theme.backgroundColor &&
                           themeTextColor == theme.textColor &&
-                          themeFontFamily == theme.fontFamily;
+                          widget.appFontFamily == theme.fontFamily;
                       return Card(
                         color: Color(theme.backgroundColor),
                         child: ListTile(
                           title: Text(theme.name, style: TextStyle(
                             color: Color(theme.textColor),
-                            fontFamily: theme.fontFamily,
+                            fontFamily: widget.appFontFamily,
                             fontWeight: FontWeight.w600,
                           )),
                           subtitle: Text('نمونه متن یادداشت', style: TextStyle(
                             color: Color(theme.textColor),
-                            fontFamily: theme.fontFamily,
+                            fontFamily: widget.appFontFamily,
                           )),
                           trailing: isSelected
                               ? Icon(Icons.check_circle, color: Color(theme.textColor))
@@ -2404,11 +2409,9 @@ class _EditorPageState extends State<EditorPage> {
     setState(() {
       themeColor = selected.backgroundColor;
       themeTextColor = selected.textColor;
-      themeFontFamily = selected.fontFamily;
-      // Apply the selected theme font to existing text and to the insertion
-      // style, so typing immediately uses the theme font as well.
-      final fontAttribute =
-          quill.Attribute.fromKeyValue('font', themeFontFamily);
+      // Theme selection changes note colors; the global UI font stays fixed.
+      themeFontFamily = widget.appFontFamily;
+      final fontAttribute = quill.Attribute.fromKeyValue('font', widget.appFontFamily);
       if (controller.document.length > 1) {
         controller.formatText(0, controller.document.length - 1, fontAttribute);
       }
