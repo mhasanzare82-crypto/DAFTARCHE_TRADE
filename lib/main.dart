@@ -663,6 +663,7 @@ class _NotesPageState extends State<NotesPage> {
     final searchNoteIndex = searchNotes.indexWhere((n) => n.id == note?.id);
     final result=await Navigator.push<Note>(context,MaterialPageRoute(builder:(_)=>EditorPage(
       note:note,themes:themes,customFonts:customFonts.keys.toList(),initialTheme:selected,
+      appFontFamily:widget.appFontFamily,
       existingNotes: List<Note>.of(notes),
       initialFolderId:note?.folderId??selectedFolderId,initialSearchTerm:query.isEmpty?null:query,
       searchNotes:searchNotes,initialSearchNoteIndex:searchNoteIndex<0?0:searchNoteIndex,
@@ -1270,8 +1271,7 @@ class _NotesPageState extends State<NotesPage> {
                   )),
                   subtitle: Text('پس‌زمینه و رنگ متن این تم'),
                   trailing: note.themeColor == theme.backgroundColor &&
-                      note.themeTextColor == theme.textColor &&
-                      note.themeFontFamily == theme.fontFamily
+                      note.themeTextColor == theme.textColor
                       ? const Icon(Icons.check_circle, color: Colors.green)
                       : null,
                   onTap: () => Navigator.pop(dialogContext, theme),
@@ -1543,7 +1543,7 @@ class _NotesPageState extends State<NotesPage> {
                 text:_highlightSearchText(
                   showFullNoteCards ? _notePlainText(n.body) : _searchPreviewLines(_notePlainText(n.body),search.text),
                   search.text,
-                  TextStyle(color:Color(n.themeTextColor),fontFamily:widget.appFontFamily),
+                  TextStyle(color:Color(n.themeTextColor),fontSize:16,fontFamily:widget.appFontFamily),
                 ),
                 maxLines:showFullNoteCards ? null : 3,
                 overflow:showFullNoteCards ? TextOverflow.visible : TextOverflow.ellipsis,
@@ -1762,12 +1762,13 @@ class EditorPage extends StatefulWidget {
   final NoteTheme initialTheme;
   final List<Note> existingNotes;
   final String? initialFolderId;
+  final String appFontFamily;
   final String? initialSearchTerm;
   final List<Note> searchNotes;
   final int initialSearchNoteIndex;
   final int initialSearchMatch;
   final Future<void> Function(Note?, int, int)? onSearchNavigate;
-  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme,this.existingNotes = const [], this.initialFolderId, this.initialSearchTerm, this.searchNotes = const [], this.initialSearchNoteIndex = 0, this.initialSearchMatch = 0, this.onSearchNavigate});
+  const EditorPage({super.key,this.note,required this.themes,required this.customFonts,required this.initialTheme,required this.appFontFamily,this.existingNotes = const [], this.initialFolderId, this.initialSearchTerm, this.searchNotes = const [], this.initialSearchNoteIndex = 0, this.initialSearchMatch = 0, this.onSearchNavigate});
   @override
   State<EditorPage> createState()=>_EditorPageState();
 }
@@ -1797,7 +1798,7 @@ class _EditorPageState extends State<EditorPage> {
     return cleaned.isEmpty ? family : cleaned;
   }
   Map<String, String> get toolbarFontFamilies => {
-    for (final family in <String>{...widget.customFonts, themeFontFamily})
+    for (final family in <String>{widget.appFontFamily})
       family: toolbarSample + ' - ' + _fontDisplayName(family),
   };
 
@@ -1813,6 +1814,11 @@ class _EditorPageState extends State<EditorPage> {
     return rawOps.map((raw) {
       final op = Map<String, dynamic>.from(raw as Map);
       final insert = op['insert'];
+      if (insert is String) {
+        final attrs = Map<String, dynamic>.from(op['attributes'] as Map? ?? {});
+        attrs['font'] = widget.appFontFamily;
+        op['attributes'] = attrs;
+      }
       if (insert is Map && insert['image'] is String) {
         final attrs = Map<String, dynamic>.from(op['attributes'] as Map? ?? {});
         // Remove old fixed sizing so previously inserted images also expand.
@@ -1872,7 +1878,7 @@ class _EditorPageState extends State<EditorPage> {
     }
     themeColor = widget.note?.themeColor ?? widget.initialTheme.backgroundColor;
     themeTextColor = widget.note?.themeTextColor ?? widget.initialTheme.textColor;
-    themeFontFamily = widget.note?.themeFontFamily ?? widget.initialTheme.fontFamily;
+    themeFontFamily = widget.appFontFamily;
     folderId = widget.note?.folderId ?? widget.initialFolderId;
     audioPaths.addAll(widget.note?.audios ?? const []);
     _loadEditorPreferences();
@@ -2270,12 +2276,12 @@ class _EditorPageState extends State<EditorPage> {
                         child: ListTile(
                           title: Text(theme.name, style: TextStyle(
                             color: Color(theme.textColor),
-                            fontFamily: theme.fontFamily,
+                            fontFamily: widget.appFontFamily,
                             fontWeight: FontWeight.w600,
                           )),
                           subtitle: Text('نمونه متن یادداشت', style: TextStyle(
                             color: Color(theme.textColor),
-                            fontFamily: theme.fontFamily,
+                            fontFamily: widget.appFontFamily,
                           )),
                           trailing: isSelected
                               ? Icon(Icons.check_circle, color: Color(theme.textColor))
@@ -2296,11 +2302,10 @@ class _EditorPageState extends State<EditorPage> {
     setState(() {
       themeColor = selected.backgroundColor;
       themeTextColor = selected.textColor;
-      themeFontFamily = selected.fontFamily;
-      // Apply the selected theme font to existing text and to the insertion
-      // style, so typing immediately uses the theme font as well.
+      themeFontFamily = widget.appFontFamily;
+      // The selected UI font remains authoritative for note content.
       final fontAttribute =
-          quill.Attribute.fromKeyValue('font', themeFontFamily);
+          quill.Attribute.fromKeyValue('font', widget.appFontFamily);
       if (controller.document.length > 1) {
         controller.formatText(0, controller.document.length - 1, fontAttribute);
       }
@@ -2495,7 +2500,7 @@ class _EditorPageState extends State<EditorPage> {
                 Expanded(
                   child: TextField(
                     controller: title, autofocus: false,
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: themeFontFamily),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: widget.appFontFamily),
                     decoration: const InputDecoration(hintText: 'عنوان', border: InputBorder.none),
                   ),
                 ),
