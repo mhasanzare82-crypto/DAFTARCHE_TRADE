@@ -184,7 +184,7 @@ class NotesPage extends StatefulWidget {
   @override
   State<NotesPage> createState() => _NotesPageState();
 }
-class _NotesPageState extends State<NotesPage> {
+class _NotesPageState extends State<NotesPage> with WidgetsBindingObserver {
   final NotebookRepository repository = NotebookRepository();
   final notes=<Note>[];
   final themes=<NoteTheme>[];
@@ -205,7 +205,29 @@ class _NotesPageState extends State<NotesPage> {
   static const defaultThemes=[NoteTheme('یاسی',0xFFEDE7F6),NoteTheme('آبی',0xFFE3F2FD),NoteTheme('سبز',0xFFE8F5E9),NoteTheme('صورتی',0xFFFCE4EC),NoteTheme('هلویی',0xFFFFEAD5)];
 
   @override
-  void initState(){super.initState();search.addListener(()=>setState((){}));noteAudioPlayer.onPlayerComplete.listen((_){if(mounted)setState(()=>currentlyPlayingAudio=null);});_loadCardDisplayMode();load();}
+  void initState(){
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    search.addListener(()=>setState((){}));
+    noteAudioPlayer.onPlayerComplete.listen((_){if(mounted)setState(()=>currentlyPlayingAudio=null);});
+    _loadCardDisplayMode();
+    load();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !loading) {
+      _refreshRandomTitle();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    search.dispose();
+    noteAudioPlayer.dispose();
+    super.dispose();
+  }
   Future<void> _loadCardDisplayMode() async { final saved = await repository.loadFullNoteCards(); if (mounted) setState(() => showFullNoteCards = saved); }
   Future<void> _toggleCardDisplayMode() async { final next = !showFullNoteCards; setState(() => showFullNoteCards = next); try { await repository.saveFullNoteCards(next); } catch (error) { if (!mounted) return; setState(() => showFullNoteCards = !next); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ذخیره حالت نمایش انجام نشد: $error'))); } }
   Future<void> load() async {
