@@ -197,6 +197,8 @@ class _NotesPageState extends State<NotesPage> {
   bool showFullNoteCards = false;
   bool isBulkSelectionMode = false;
   final Set<String> selectedNoteIds = <String>{};
+  bool isBulkSelectionMode = false;
+  final Set<String> selectedNoteIds = <String>{};
   final customFonts=<String, String>{};
   final randomThemeNames=<String>{};
   final textColorPalette=<int>[];
@@ -688,6 +690,230 @@ class _NotesPageState extends State<NotesPage> {
       title:const Text('حذف یادداشت؟'),content:const Text('این یادداشت حذف خواهد شد.'),
       actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('انصراف')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:const Text('حذف'))]));
     if(yes==true){setState(()=>notes.removeWhere((x)=>x.id==n.id));await persist();}
+  }
+
+
+  List<Note> _selectedNotesInView(List<Note> visible) =>
+      visible.where((n) => selectedNoteIds.contains(n.id)).toList();
+
+  void _toggleBulkSelection(Note note) {
+    setState(() {
+      isBulkSelectionMode = true;
+      if (!selectedNoteIds.add(note.id)) selectedNoteIds.remove(note.id);
+      if (selectedNoteIds.isEmpty) isBulkSelectionMode = false;
+    });
+  }
+
+  void _clearBulkSelection() {
+    setState(() {
+      selectedNoteIds.clear();
+      isBulkSelectionMode = false;
+    });
+  }
+
+  void _toggleSelectAll(List<Note> visible) {
+    setState(() {
+      final allSelected = visible.isNotEmpty &&
+          visible.every((note) => selectedNoteIds.contains(note.id));
+      if (allSelected) {
+        selectedNoteIds.removeAll(visible.map((note) => note.id));
+      } else {
+        selectedNoteIds.addAll(visible.map((note) => note.id));
+      }
+      isBulkSelectionMode = selectedNoteIds.isNotEmpty;
+    });
+  }
+
+  Future<void> _deleteSelectedNotes(List<Note> visible) async {
+    final selected = _selectedNotesInView(visible);
+    if (selected.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('حذف گروهی نوشته‌ها؟'),
+          content: Text('تعداد ${selected.length} نوشته برای همیشه حذف می‌شود. ادامه می‌دهی؟'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف نوشته‌ها')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ids = selected.map((note) => note.id).toSet();
+    setState(() {
+      notes.removeWhere((note) => ids.contains(note.id));
+      selectedNoteIds.clear();
+      isBulkSelectionMode = false;
+    });
+    await persist();
+  }
+
+  Future<String?> _chooseBulkDestination() {
+    return showDialog<String?>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('انتقال نوشته‌های انتخاب‌شده'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.inbox_outlined),
+                  title: const Text('بدون پوشه'),
+                  onTap: () => Navigator.pop(dialogContext, ''),
+                ),
+                ...folders.map((folder) => ListTile(
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text(folder.name),
+                  onTap: () => Navigator.pop(dialogContext, folder.id),
+                )),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _moveSelectedNotes(List<Note> visible) async {
+    final selected = _selectedNotesInView(visible);
+    if (selected.isEmpty) return;
+    final destination = await _chooseBulkDestination();
+    if (destination == null || !mounted) return;
+    final folderId = destination.isEmpty ? null : destination;
+    final ids = selected.map((note) => note.id).toSet();
+    setState(() {
+      for (var index = 0; index < notes.length; index++) {
+        final note = notes[index];
+        if (!ids.contains(note.id)) continue;
+        notes[index] = Note(
+          note.id, note.title, note.body, DateTime.now(),
+          List<String>.of(note.images), note.themeColor, note.themeTextColor,
+          note.themeFontFamily, folderId, List<String>.of(note.audios),
+        );
+      }
+      selectedNoteIds.clear();
+      isBulkSelectionMode = false;
+    });
+    await persist();
+  }
+
+  Future<void> _applyThemeToSelectedNotes(List<Note> visible) async {
+    final selected = _selectedNotesInView(visible);
+    if (selected.isEmpty) return;
+    final choices = themes.isEmpty ? defaultThemes : List<NoteTheme>.of(themes);
+    final theme = await showDialog<NoteTheme>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('انتخاب تم برای نوشته‌های انتخاب‌شده'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: choices.map((item) => ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Color(item.backgroundColor),
+                  child: Icon(Icons.text_fields, color: Color(item.textColor)),
+                ),
+                title: Text(item.name, style: TextStyle(
+                  color: Color(item.textColor), fontFamily: item.fontFamily,
+                )),
+                subtitle: const Text('پس‌زمینه، رنگ متن و فونت'),
+                onTap: () => Navigator.pop(dialogContext, item),
+              )).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')),
+          ],
+        ),
+      ),
+    );
+    if (theme == null || !mounted) return;
+    final ids = selected.map((note) => note.id).toSet();
+    setState(() {
+      for (var index = 0; index < notes.length; index++) {
+        final note = notes[index];
+        if (!ids.contains(note.id)) continue;
+        notes[index] = Note(
+          note.id, note.title, note.body, DateTime.now(),
+          List<String>.of(note.images), theme.backgroundColor, theme.textColor,
+          theme.fontFamily, note.folderId, List<String>.of(note.audios),
+        );
+      }
+      selectedNoteIds.clear();
+      isBulkSelectionMode = false;
+    });
+    await persist();
+  }
+
+  String _safeDocxFileName(String title) {
+    final value = title.trim().isEmpty ? 'بدون عنوان' : title.trim();
+    final safe = value
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'[. ]+$'), '')
+        .trim();
+    return safe.isEmpty ? 'بدون عنوان' : safe;
+  }
+
+  Future<void> _exportSelectedNotesSeparately(List<Note> visible) async {
+    final selected = _selectedNotesInView(visible);
+    if (selected.isEmpty) return;
+    try {
+      final path = await FilePicker.getDirectoryPath(
+        dialogTitle: 'انتخاب پوشه ذخیره فایل‌های Word',
+      );
+      if (path == null || path.isEmpty || !mounted) return;
+      final directory = Directory(path);
+      if (!await directory.exists()) {
+        throw FileSystemException('پوشه انتخاب‌شده در دسترس نیست.', path);
+      }
+      final usedNames = <String>{};
+      var exported = 0;
+      final failures = <String>[];
+      for (final note in selected) {
+        final baseName = _safeDocxFileName(note.title);
+        var fileName = '$baseName.docx';
+        var suffix = 2;
+        while (usedNames.contains(fileName.toLowerCase()) ||
+            await File('${directory.path}/$fileName').exists()) {
+          fileName = '${baseName}_$suffix.docx';
+          suffix++;
+        }
+        usedNames.add(fileName.toLowerCase());
+        try {
+          final bytes = await _buildDocx(<Note>[note]);
+          await File('${directory.path}/$fileName').writeAsBytes(bytes, flush: true);
+          exported++;
+        } catch (error) {
+          failures.add(note.title.isEmpty ? 'بدون عنوان' : note.title);
+          debugPrint('DOCX export failed for ${note.id}: $error');
+        }
+      }
+      if (!mounted) return;
+      final message = failures.isEmpty
+          ? '$exported فایل Word جداگانه ذخیره شد.'
+          : '$exported فایل ذخیره شد؛ ${failures.length} نوشته ناموفق بود.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      if (failures.isEmpty) _clearBulkSelection();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خروجی گروهی Word انجام نشد: $error')),
+        );
+      }
+    }
   }
 
   String _xmlEscape(String value) => value.replaceAll('&', '&amp;')
