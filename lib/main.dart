@@ -1473,7 +1473,12 @@ class _NotesPageState extends State<NotesPage> {
           ),
         ],
       ),
-      floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => edit(),
+        tooltip: 'یادداشت جدید',
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add_rounded, size: 38),
+      ),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Row(
@@ -2549,7 +2554,7 @@ class _EditorPageState extends State<EditorPage> {
                   child: TextField(
                     controller: title, autofocus: false,
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(themeTextColor), fontFamily: themeFontFamily),
-                    decoration: const InputDecoration(hintText: 'عنوان یادداشت', border: InputBorder.none),
+                    decoration: const InputDecoration(hintText: 'عنوان', border: InputBorder.none),
                   ),
                 ),
                 IconButton(
@@ -2580,7 +2585,7 @@ class _EditorPageState extends State<EditorPage> {
                 editorKey: editorKey,
                 padding: EdgeInsets.symmetric(vertical: editorVerticalPadding, horizontal: editorHorizontalPadding),
                 maxContentWidth: MediaQuery.sizeOf(context).width,
-                placeholder: 'متن یادداشتت را اینجا بنویس...',
+                placeholder: 'تایپ را آغاز کنید',
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(
                   imageEmbedConfig: QuillEditorImageEmbedConfig(
                     imageProviderBuilder: (context, imageUrl) {
