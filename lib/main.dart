@@ -194,13 +194,16 @@ class _NotesPageState extends State<NotesPage> {
   String? currentlyPlayingAudio;
   String? selectedFolderId;
   bool loading=true;
+  bool showFullNoteCards = false;
   final customFonts=<String, String>{};
   final randomThemeNames=<String>{};
   final textColorPalette=<int>[];
   static const defaultThemes=[NoteTheme('یاسی',0xFFEDE7F6),NoteTheme('آبی',0xFFE3F2FD),NoteTheme('سبز',0xFFE8F5E9),NoteTheme('صورتی',0xFFFCE4EC),NoteTheme('هلویی',0xFFFFEAD5)];
 
   @override
-  void initState(){super.initState();search.addListener(()=>setState((){}));noteAudioPlayer.onPlayerComplete.listen((_){if(mounted)setState(()=>currentlyPlayingAudio=null);});load();}
+  void initState(){super.initState();search.addListener(()=>setState((){}));noteAudioPlayer.onPlayerComplete.listen((_){if(mounted)setState(()=>currentlyPlayingAudio=null);});_loadCardDisplayMode();load();}
+  Future<void> _loadCardDisplayMode() async { final saved = await repository.loadFullNoteCards(); if (mounted) setState(() => showFullNoteCards = saved); }
+  Future<void> _toggleCardDisplayMode() async { final next = !showFullNoteCards; setState(() => showFullNoteCards = next); try { await repository.saveFullNoteCards(next); } catch (error) { if (!mounted) return; setState(() => showFullNoteCards = !next); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ذخیره حالت نمایش انجام نشد: $error'))); } }
   Future<void> load() async {
     try {
       final loadedNotes = await repository.loadNotes();
@@ -1162,7 +1165,7 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context){
     final items=filtered;
     return Directionality(textDirection:TextDirection.rtl,child:Scaffold(
-      appBar:AppBar(actions:[IconButton(tooltip:'انتخاب روش تغییر رنگ یادداشت‌ها',onPressed:_showNoteColorOptions,icon:const Icon(Icons.palette_outlined)),PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined))]),
+      appBar:AppBar(actions:[IconButton(tooltip:showFullNoteCards?'نمایش خلاصه یادداشت‌ها':'نمایش کامل متن و تصاویر یادداشت‌ها',onPressed:_toggleCardDisplayMode,icon:Icon(showFullNoteCards?Icons.view_agenda_outlined:Icons.article_outlined)),IconButton(tooltip:'انتخاب روش تغییر رنگ یادداشت‌ها',onPressed:_showNoteColorOptions,icon:const Icon(Icons.palette_outlined)),PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined))]),
       floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -1229,14 +1232,33 @@ class _NotesPageState extends State<NotesPage> {
               Row(children:[Expanded(child:RichText(text:_highlightSearchText(n.title.isEmpty?'بدون عنوان':n.title,search.text,TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),maxLines:1,overflow:TextOverflow.ellipsis)),IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))]),
               if(_notePlainText(n.body).isNotEmpty)RichText(
                 text:_highlightSearchText(
-                  _searchPreviewLines(_notePlainText(n.body),search.text),
+                  showFullNoteCards ? _notePlainText(n.body) : _searchPreviewLines(_notePlainText(n.body),search.text),
                   search.text,
                   TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily),
                 ),
-                maxLines:3,
-                overflow:TextOverflow.ellipsis,
+                maxLines:showFullNoteCards ? null : 3,
+                overflow:showFullNoteCards ? TextOverflow.visible : TextOverflow.ellipsis,
               ),
-              if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Color(n.themeTextColor).withOpacity(.7),fontSize:12))),
+              if(showFullNoteCards && n.images.isNotEmpty)
+                Padding(
+                  padding:const EdgeInsets.only(top:10),
+                  child:Column(
+                    crossAxisAlignment:CrossAxisAlignment.stretch,
+                    children:[
+                      for(final imagePath in n.images)
+                        if(File(imagePath).existsSync())
+                          Padding(
+                            padding:const EdgeInsets.only(bottom:8),
+                            child:ClipRRect(
+                              borderRadius:BorderRadius.circular(10),
+                              child:Image.file(File(imagePath),fit:BoxFit.contain),
+                            ),
+                          ),
+                    ],
+                  ),
+                )
+              else if(n.images.isNotEmpty)
+                Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Color(n.themeTextColor).withOpacity(.7),fontSize:12))),
               if(n.audios.isNotEmpty)Padding(
                 padding:const EdgeInsets.only(top:8),
                 child:Wrap(
