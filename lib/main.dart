@@ -1356,6 +1356,7 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context){
     final items=filtered;
     return Directionality(textDirection:TextDirection.rtl,child:Scaffold(
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       appBar:AppBar(
         title: isBulkSelectionMode
             ? Text('${_selectedNotesInView(items).length} نوشته انتخاب شده')
@@ -1498,14 +1499,6 @@ class _NotesPageState extends State<NotesPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'عنوان تصادفی از نوشته‌ها',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(.65),
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
                                 randomTitleNote!.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -1513,11 +1506,6 @@ class _NotesPageState extends State<NotesPage> {
                               ),
                             ],
                           ),
-                        ),
-                        Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          size: 14,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(.55),
                         ),
                       ],
                     ),
