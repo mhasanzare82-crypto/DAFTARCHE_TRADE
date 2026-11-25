@@ -1965,11 +1965,96 @@ class _EditorPageState extends State<EditorPage> {
 
   double editorDefaultSize = 20.0;
   String editorDefaultFont = 'Estedad';
+  double editorHorizontalPadding = 16.0;
+  double editorVerticalPadding = 14.0;
+
+  Future<void> _showEditorPaddingSettings() async {
+    final repository = NotebookRepository();
+    final previousHorizontal = editorHorizontalPadding;
+    final previousVertical = editorVerticalPadding;
+    var horizontal = editorHorizontalPadding;
+    var vertical = editorVerticalPadding;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('فاصله متن از کادر'),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(children: [const Expanded(child: Text('فاصله افقی')), Text('${horizontal.round()}')]),
+                  Slider(
+                    value: horizontal, min: 0, max: 48, divisions: 48,
+                    label: horizontal.round().toString(),
+                    onChanged: (value) {
+                      setDialogState(() => horizontal = value);
+                      if (mounted) setState(() => editorHorizontalPadding = value);
+                    },
+                  ),
+                  Row(children: [const Expanded(child: Text('فاصله عمودی')), Text('${vertical.round()}')]),
+                  Slider(
+                    value: vertical, min: 0, max: 48, divisions: 48,
+                    label: vertical.round().toString(),
+                    onChanged: (value) {
+                      setDialogState(() => vertical = value);
+                      if (mounted) setState(() => editorVerticalPadding = value);
+                    },
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        setDialogState(() { horizontal = 16.0; vertical = 14.0; });
+                        if (mounted) setState(() {
+                          editorHorizontalPadding = 16.0;
+                          editorVerticalPadding = 14.0;
+                        });
+                      },
+                      icon: const Icon(Icons.restart_alt),
+                      label: const Text('بازگشت به پیش‌فرض'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')),
+              FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ذخیره')),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result != true) {
+      setState(() {
+        editorHorizontalPadding = previousHorizontal;
+        editorVerticalPadding = previousVertical;
+      });
+      return;
+    }
+    try {
+      await repository.saveEditorPadding(horizontal: editorHorizontalPadding, vertical: editorVerticalPadding);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        editorHorizontalPadding = previousHorizontal;
+        editorVerticalPadding = previousVertical;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ذخیره فاصله متن انجام نشد: $error')));
+    }
+  }
 
   Future<void> _loadEditorPreferences() async {
     final repository = NotebookRepository();
     editorDefaultFont = await repository.loadEditorFont();
     editorDefaultSize = await repository.loadEditorFontSize();
+    editorHorizontalPadding = await repository.loadEditorHorizontalPadding();
+    editorVerticalPadding = await repository.loadEditorVerticalPadding();
     if (!mounted) return;
     if (widget.note == null) {
       // A new note inherits its font from the selected note theme, not the
@@ -2371,7 +2456,7 @@ class _EditorPageState extends State<EditorPage> {
               controller: controller,
               config: quill.QuillEditorConfig(
                 editorKey: editorKey,
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 0),
+                padding: EdgeInsets.symmetric(vertical: editorVerticalPadding, horizontal: editorHorizontalPadding),
                 maxContentWidth: MediaQuery.sizeOf(context).width,
                 placeholder: 'متن یادداشتت را اینجا بنویس...',
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(
@@ -2458,6 +2543,11 @@ class _EditorPageState extends State<EditorPage> {
                   icon: const Icon(Icons.palette_outlined),
                   tooltip: 'انتخاب تم یادداشت',
                   onPressed: chooseEditorTheme,
+                ),
+                quill.QuillToolbarCustomButtonOptions(
+                  icon: const Icon(Icons.format_indent_increase),
+                  tooltip: 'تنظیم فاصله متن از کادر',
+                  onPressed: _showEditorPaddingSettings,
                 ),
                 quill.QuillToolbarCustomButtonOptions(
                   icon: const Icon(Icons.add_photo_alternate_outlined),
