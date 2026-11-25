@@ -194,6 +194,7 @@ class _NotesPageState extends State<NotesPage> {
   final AudioPlayer noteAudioPlayer = AudioPlayer();
   String? currentlyPlayingAudio;
   String? selectedFolderId;
+  Note? randomTitleNote;
   bool loading=true;
   bool showFullNoteCards = false;
   bool isBulkSelectionMode = false;
@@ -234,6 +235,7 @@ class _NotesPageState extends State<NotesPage> {
       if (themes.isEmpty) themes.addAll(defaultThemes);
       if (randomThemeNames.isEmpty) randomThemeNames.addAll(themes.map((t) => t.name));
       if (mounted) setState(() => loading = false);
+      _refreshRandomTitle();
       await persistThemes();
       await repository.saveRandomThemeNames(randomThemeNames.toList());
     } catch (error, stackTrace) {
@@ -654,6 +656,21 @@ class _NotesPageState extends State<NotesPage> {
     if (cursor < value.length) spans.add(TextSpan(text: value.substring(cursor)));
     return TextSpan(style: baseStyle, children: spans);
   }
+  void _refreshRandomTitle() {
+    final titledNotes = notes.where((note) => note.title.trim().isNotEmpty).toList();
+    if (!mounted) return;
+    setState(() {
+      if (titledNotes.isEmpty) {
+        randomTitleNote = null;
+      } else {
+        final choices = titledNotes.length > 1 && randomTitleNote != null
+            ? titledNotes.where((note) => note.id != randomTitleNote!.id).toList()
+            : titledNotes;
+        randomTitleNote = choices[Random().nextInt(choices.length)];
+      }
+    });
+  }
+
   Future<void> edit([Note? note, String? searchTerm, int initialMatch = 0]) async {
     final availableThemes = themes.where((theme) => randomThemeNames.contains(theme.name)).toList();
     final themePool = availableThemes.isNotEmpty ? availableThemes : (themes.isEmpty ? defaultThemes : themes);
@@ -680,9 +697,13 @@ class _NotesPageState extends State<NotesPage> {
         if (mounted) await edit(target, query, targetMatch);
       },
     )));
-    if(result==null)return;
+    if(result==null) {
+      _refreshRandomTitle();
+      return;
+    }
     setState(() { final i=notes.indexWhere((n)=>n.id==result.id); if(i<0){notes.add(result);}else{notes[i]=result;} });
     await persist();
+    _refreshRandomTitle();
   }
   Future<void> remove(Note n) async {
     final yes=await showDialog<bool>(context:context,builder:(c)=>AlertDialog(
@@ -1423,6 +1444,72 @@ class _NotesPageState extends State<NotesPage> {
       ),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          if (!loading && randomTitleNote != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Material(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(.72),
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => edit(randomTitleNote),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(.18),
+                      ),
+                      gradient: LinearGradient(
+                        begin: Alignment.centerRight,
+                        end: Alignment.centerLeft,
+                        colors: [
+                          Theme.of(context).colorScheme.primary.withOpacity(.09),
+                          Theme.of(context).colorScheme.surface.withOpacity(.35),
+                        ],
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.auto_awesome_rounded,
+                          size: 19,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'عنوان تصادفی از نوشته‌ها',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(.65),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                randomTitleNote!.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          size: 14,
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(.55),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           Row(
             children: [
               IconButton(
