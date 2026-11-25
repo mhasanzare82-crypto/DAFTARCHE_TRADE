@@ -195,6 +195,8 @@ class _NotesPageState extends State<NotesPage> {
   String? selectedFolderId;
   bool loading=true;
   bool showFullNoteCards = false;
+  bool isBulkSelectionMode = false;
+  final Set<String> selectedNoteIds = <String>{};
   final customFonts=<String, String>{};
   final randomThemeNames=<String>{};
   final textColorPalette=<int>[];
@@ -1165,7 +1167,42 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context){
     final items=filtered;
     return Directionality(textDirection:TextDirection.rtl,child:Scaffold(
-      appBar:AppBar(actions:[IconButton(tooltip:showFullNoteCards?'نمایش خلاصه یادداشت‌ها':'نمایش کامل متن و تصاویر یادداشت‌ها',onPressed:_toggleCardDisplayMode,icon:Icon(showFullNoteCards?Icons.view_agenda_outlined:Icons.article_outlined)),IconButton(tooltip:'انتخاب روش تغییر رنگ یادداشت‌ها',onPressed:_showNoteColorOptions,icon:const Icon(Icons.palette_outlined)),PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined))]),
+      appBar:AppBar(
+        title: isBulkSelectionMode
+            ? Text('${_selectedNotesInView(items).length} نوشته انتخاب شده')
+            : null,
+        leading: isBulkSelectionMode
+            ? IconButton(tooltip: 'خروج از انتخاب گروهی', onPressed: _clearBulkSelection, icon: const Icon(Icons.close))
+            : null,
+        actions: isBulkSelectionMode ? [
+          IconButton(
+            tooltip: 'انتخاب همه نوشته‌های این بخش',
+            onPressed: () => _toggleSelectAll(items),
+            icon: Icon(items.isNotEmpty && items.every((n) => selectedNoteIds.contains(n.id))
+                ? Icons.deselect : Icons.select_all),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'عملیات گروهی',
+            onSelected: (action) {
+              if (action == 'delete') _deleteSelectedNotes(items);
+              if (action == 'move') _moveSelectedNotes(items);
+              if (action == 'export') _exportSelectedNotesSeparately(items);
+              if (action == 'theme') _applyThemeToSelectedNotes(items);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline, color: Colors.red), title: Text('حذف گروهی'))),
+              PopupMenuItem(value: 'move', child: ListTile(leading: Icon(Icons.drive_file_move_outline), title: Text('انتقال به پوشه'))),
+              PopupMenuItem(value: 'export', child: ListTile(leading: Icon(Icons.file_download_outlined), title: Text('خروجی جداگانه DOCX'))),
+              PopupMenuItem(value: 'theme', child: ListTile(leading: Icon(Icons.palette_outlined), title: Text('تغییر تم گروهی'))),
+            ],
+          ),
+        ] : [
+          IconButton(tooltip:showFullNoteCards?'نمایش خلاصه یادداشت‌ها':'نمایش کامل متن و تصاویر یادداشت‌ها',onPressed:_toggleCardDisplayMode,icon:Icon(showFullNoteCards?Icons.view_agenda_outlined:Icons.article_outlined)),
+          IconButton(tooltip:'انتخاب روش تغییر رنگ یادداشت‌ها',onPressed:_showNoteColorOptions,icon:const Icon(Icons.palette_outlined)),
+          PopupMenuButton<String>(tooltip:'ورود و خروجی فایل‌ها',onSelected:(value){if(value=='import')importDocx();if(value=='export')exportDocx(notes);if(value=='backup')createBackup();if(value=='restore')restoreBackup();},itemBuilder:(context)=>const [PopupMenuItem(value:'import',child:ListTile(leading:Icon(Icons.file_open),title:Text('ورود گروهی DOCX'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.file_download),title:Text('خروجی گروهی DOCX'))),PopupMenuDivider(),PopupMenuItem(value:'backup',child:ListTile(leading:Icon(Icons.backup_outlined),title:Text('ساخت فایل پشتیبان'))),PopupMenuItem(value:'restore',child:ListTile(leading:Icon(Icons.settings_backup_restore),title:Text('بازیابی فایل پشتیبان')))]),
+          IconButton(tooltip:'تنظیمات و شخصی‌سازی',onPressed:manageThemes,icon:const Icon(Icons.settings_outlined)),
+        ],
+      ),
       floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -1178,7 +1215,7 @@ class _NotesPageState extends State<NotesPage> {
                 padding: const EdgeInsets.only(left: 8),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () => setState(() => selectedFolderId = null),
+                  onTap: () => setState(() { selectedFolderId = null; selectedNoteIds.clear(); isBulkSelectionMode = false; }),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     decoration: BoxDecoration(
@@ -1193,7 +1230,7 @@ class _NotesPageState extends State<NotesPage> {
                 padding: const EdgeInsets.only(left: 8),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () => setState(() => selectedFolderId = folder.id),
+                  onTap: () => setState(() { selectedFolderId = folder.id; selectedNoteIds.clear(); isBulkSelectionMode = false; }),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     decoration: BoxDecoration(
@@ -1228,8 +1265,33 @@ class _NotesPageState extends State<NotesPage> {
               : const SizedBox.shrink())
           :ListView.separated(padding:const EdgeInsets.fromLTRB(20,0,20,100),itemCount:items.length,separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(_,i){
             final n=items[i];
-            return Card(elevation:0,color:Color(n.themeColor),child:InkWell(onTap:()=>edit(n,search.text.trim().isEmpty||!_notePlainText(n.body).toLowerCase().contains(search.text.trim().toLowerCase())?null:search.text.trim()),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Row(children:[Expanded(child:RichText(text:_highlightSearchText(n.title.isEmpty?'بدون عنوان':n.title,search.text,TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),maxLines:1,overflow:TextOverflow.ellipsis)),IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))]),
+            final isSelected = selectedNoteIds.contains(n.id);
+            return Card(
+              elevation: isSelected ? 2 : 0,
+              color: Color(n.themeColor),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: isSelected ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 2) : BorderSide.none,
+              ),
+              child: InkWell(
+                onLongPress: () => _toggleBulkSelection(n),
+                onTap: () {
+                  if (isBulkSelectionMode) {
+                    _toggleBulkSelection(n);
+                  } else {
+                    edit(n,search.text.trim().isEmpty||!_notePlainText(n.body).toLowerCase().contains(search.text.trim().toLowerCase())?null:search.text.trim());
+                  }
+                },
+                child: Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Row(children:[
+                if (isBulkSelectionMode)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked, color: Color(n.themeTextColor)),
+                  ),
+                Expanded(child:RichText(text:_highlightSearchText(n.title.isEmpty?'بدون عنوان':n.title,search.text,TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),maxLines:1,overflow:TextOverflow.ellipsis)),
+                if (!isBulkSelectionMode) IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))
+              ]),
               if(_notePlainText(n.body).isNotEmpty)RichText(
                 text:_highlightSearchText(
                   showFullNoteCards ? _notePlainText(n.body) : _searchPreviewLines(_notePlainText(n.body),search.text),
