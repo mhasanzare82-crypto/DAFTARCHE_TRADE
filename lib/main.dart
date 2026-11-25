@@ -2281,12 +2281,12 @@ class _EditorPageState extends State<EditorPage> {
                                   dense: true,
                                   leading: const Icon(Icons.description_outlined),
                                   title: Text(note.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                                  subtitle: Text(
-                                    widget.existingNotes.where((item) => item.title.trim() == note.title.trim()).length > 1
-                                        ? 'عنوان تکراری؛ هنگام ذخیره پیام خطا نمایش داده می‌شود'
-                                        : 'انتخاب عنوان',
-                                    maxLines: 2,
-                                  ),
+                                  subtitle: widget.existingNotes.where((item) => item.title.trim() == note.title.trim()).length > 1
+                                      ? const Text(
+                                          'عنوان تکراری؛ هنگام ذخیره پیام خطا نمایش داده می‌شود',
+                                          maxLines: 2,
+                                        )
+                                      : null,
                                   onTap: () => Navigator.pop(dialogContext, note.title),
                                 );
                               },
