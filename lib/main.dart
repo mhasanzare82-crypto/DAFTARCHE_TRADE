@@ -474,9 +474,21 @@ class _NotesPageState extends State<NotesPage> {
     if(mounted){setState((){});ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('فونت «'+original+'» اضافه شد. اکنون نام آن را در بخش فونت تم انتخاب کن.')));}
   }
   List<Note> get filtered {
-    final q=search.text.trim().toLowerCase();
-    final list=notes.where((n)=>(selectedFolderId==null||n.folderId==selectedFolderId)&&(n.title.toLowerCase().contains(q)||_notePlainText(n.body).toLowerCase().contains(q))).toList();
-    list.sort((a,b)=>b.updated.compareTo(a.updated));return list;
+    final q = search.text.trim().toLowerCase();
+
+    // The main "همه" view is intentionally the unfiled view:
+    // notes assigned to a folder appear only inside that folder.
+    final list = notes.where((note) {
+      final matchesFolder = selectedFolderId == null
+          ? note.folderId == null
+          : note.folderId == selectedFolderId;
+      final matchesSearch = note.title.toLowerCase().contains(q) ||
+          _notePlainText(note.body).toLowerCase().contains(q);
+      return matchesFolder && matchesSearch;
+    }).toList();
+
+    list.sort((a, b) => b.updated.compareTo(a.updated));
+    return list;
   }
 
   // During a search, show the exact original line(s) containing the query.
