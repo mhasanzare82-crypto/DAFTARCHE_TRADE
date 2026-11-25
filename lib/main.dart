@@ -1558,14 +1558,14 @@ class _NotesPageState extends State<NotesPage> {
                     padding: const EdgeInsets.only(left: 8),
                     child: Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked, color: Color(n.themeTextColor)),
                   ),
-                Expanded(child:RichText(text:_highlightSearchText(n.title.isEmpty?'بدون عنوان':n.title,search.text,TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),maxLines:1,overflow:TextOverflow.ellipsis)),
+                Expanded(child:RichText(text:_highlightSearchText(n.title.isEmpty?'بدون عنوان':n.title,search.text,TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:Color(n.themeTextColor),fontFamily:widget.appFontFamily)),maxLines:1,overflow:TextOverflow.ellipsis)),
                 if (!isBulkSelectionMode) IconButton(tooltip:'گزینه‌های یادداشت',onPressed:()=>showNoteMenu(n),icon:const Icon(Icons.more_vert))
               ]),
               if(_notePlainText(n.body).isNotEmpty)RichText(
                 text:_highlightSearchText(
                   showFullNoteCards ? _notePlainText(n.body) : _searchPreviewLines(_notePlainText(n.body),search.text),
                   search.text,
-                  TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily),
+                  TextStyle(color:Color(n.themeTextColor),fontFamily:widget.appFontFamily),
                 ),
                 maxLines:showFullNoteCards ? null : 3,
                 overflow:showFullNoteCards ? TextOverflow.visible : TextOverflow.ellipsis,
