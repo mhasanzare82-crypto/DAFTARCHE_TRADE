@@ -1473,7 +1473,12 @@ class _NotesPageState extends State<NotesPage> {
           ),
         ],
       ),
-      floatingActionButton:FloatingActionButton.extended(onPressed:()=>edit(),icon:const Icon(Icons.edit_note_rounded),label:const Text('یادداشت جدید')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => edit(),
+        tooltip: 'یادداشت جدید',
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add_rounded, size: 38),
+      ),
       body:SafeArea(child:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(20,8,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Row(
