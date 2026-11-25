@@ -1236,7 +1236,7 @@ class _NotesPageState extends State<NotesPage> {
                 maxLines:3,
                 overflow:TextOverflow.ellipsis,
               ),
-              if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Color(n.themeTextColor).withOpacity(.7),fontSize:12,fontFamily:n.themeFontFamily))),
+              if(n.images.isNotEmpty)Padding(padding:const EdgeInsets.only(top:8),child:Text(n.images.length.toString()+' تصویر پیوست شده',style:TextStyle(color:Color(n.themeTextColor).withOpacity(.7),fontSize:12))),
               if(n.audios.isNotEmpty)Padding(
                 padding:const EdgeInsets.only(top:8),
                 child:Wrap(
@@ -1252,14 +1252,14 @@ class _NotesPageState extends State<NotesPage> {
                           size:18,
                           color:Color(n.themeTextColor),
                         ),
-                        label:Text('پخش ویس ${audioIndex+1}',style:TextStyle(color:Color(n.themeTextColor),fontFamily:n.themeFontFamily)),
+                        label:Text('پخش ویس ${audioIndex+1}',style:TextStyle(color:Color(n.themeTextColor))),
                         onPressed:()=>playNoteAudio(n.audios[audioIndex]),
                         backgroundColor:Color(n.themeColor).withOpacity(.75),
                       ),
                   ],
                 ),
               ),
-              const SizedBox(height:8),Text(date(n.updated),style:TextStyle(fontSize:11,color:Color(n.themeTextColor).withOpacity(.65),fontFamily:n.themeFontFamily)),
+              const SizedBox(height:8),Text(date(n.updated),style:TextStyle(fontSize:11,color:Color(n.themeTextColor).withOpacity(.65))),
             ]))));
           })),
       ])),
